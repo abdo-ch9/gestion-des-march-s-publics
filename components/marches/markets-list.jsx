@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
 import { Badge } from "../../components/ui/badge"
@@ -8,301 +8,275 @@ import { Input } from "../../components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog"
-import { Edit, Eye, Calendar, DollarSign, Clock, FileText } from "lucide-react"
+import { Edit, Eye, Calendar, DollarSign, Clock, FileText, Loader2, RefreshCw } from "lucide-react"
 import { Label } from "../../components/ui/label"
+import { useMarkets } from "../../lib/hooks/use-markets"
+import { toast } from "sonner"
+import { EditMarketForm } from "./edit-market-form"
 
-export function MarketsList({ searchTerm, statusFilter, onMarketSelect }) {
+export function MarketsList({ searchTerm, statusFilter, onMarketSelect, onRefresh }) {
   const [isEditMarketOpen, setIsEditMarketOpen] = useState(false)
   const [selectedMarketForEdit, setSelectedMarketForEdit] = useState(null)
+  const [filteredMarkets, setFilteredMarkets] = useState([])
+  
+  const { markets, loading, error, fetchMarkets, deleteMarket } = useMarkets()
 
-  // Mock data for demonstration
-  const markets = [
-    {
-      id: "MP-001",
-      number: "MP-2024-001",
-      object: "Installation Système d'Irrigation",
-      attributaire: "Entreprise Al Amal SARL",
-      amount: 2500000,
-      status: "active",
-      startDate: "2024-01-15",
-      endDate: "2024-06-15",
-      progress: 65,
-      service: "Irrigation",
-      contractType: "Travaux"
-    },
-    {
-      id: "MP-002",
-      number: "MP-2024-002",
-      object: "Formation Techniques Agricoles",
-      attributaire: "Institut de Formation Agricole",
-      amount: 850000,
-      status: "completed",
-      startDate: "2023-09-01",
-      endDate: "2024-02-28",
-      progress: 100,
-      service: "Formation",
-      contractType: "Services"
-    },
-    {
-      id: "MP-003",
-      number: "MP-2024-003",
-      object: "Maintenance Équipements",
-      attributaire: "Techni-Maintenance",
-      amount: 1200000,
-      status: "delayed",
-      startDate: "2024-02-01",
-      endDate: "2024-05-01",
-      progress: 45,
-      service: "Équipement",
-      contractType: "Maintenance"
-    },
-    {
-      id: "MP-004",
-      number: "MP-2024-004",
-      object: "Construction Bâtiment Administratif",
-      attributaire: "Construction Plus",
-      amount: 15000000,
-      status: "active",
-      startDate: "2024-03-01",
-      endDate: "2025-03-01",
-      progress: 25,
-      service: "Infrastructure",
-      contractType: "Travaux"
-    },
-    {
-      id: "MP-005",
-      number: "MP-2024-005",
-      object: "Fourniture Matériel Informatique",
-      attributaire: "Tech Solutions",
-      amount: 750000,
-      status: "pending",
-      startDate: "2024-04-01",
-      endDate: "2024-07-01",
-      progress: 0,
-      service: "Informatique",
-      contractType: "Fournitures"
+  // Filter markets based on search term and status
+  useEffect(() => {
+    let filtered = markets
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(market => 
+        market.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        market.object?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        market.service?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        market.attributaire?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     }
-  ]
 
+    // Filter by status
+    if (statusFilter && statusFilter !== 'all') {
+      filtered = filtered.filter(market => market.status === statusFilter)
+    }
+
+    setFilteredMarkets(filtered)
+  }, [markets, searchTerm, statusFilter])
+
+  // Handle market deletion
+  const handleDeleteMarket = async (marketId) => {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce marché ?')) {
+      try {
+        await deleteMarket(marketId)
+        toast.success('Marché supprimé avec succès')
+      } catch (err) {
+        toast.error('Erreur lors de la suppression du marché')
+      }
+    }
+  }
+
+  // Format currency
+  const formatCurrency = (amount, currency = 'MAD') => {
+    if (!amount) return 'N/A'
+    return new Intl.NumberFormat('fr-MA', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 0,
+    }).format(amount)
+  }
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('fr-FR')
+  }
+
+  // Get status badge
   const getStatusBadge = (status) => {
     switch (status) {
-      case "active":
+      case "draft":
+        return <Badge className="bg-gray-100 text-gray-800">Brouillon</Badge>
+      case "published":
+        return <Badge className="bg-blue-100 text-blue-800">Publié</Badge>
+      case "in_progress":
         return <Badge className="bg-green-100 text-green-800">En cours</Badge>
       case "completed":
-        return <Badge className="bg-blue-100 text-blue-800">Terminé</Badge>
-      case "delayed":
-        return <Badge className="bg-red-100 text-red-800">En retard</Badge>
-      case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800">En attente</Badge>
+        return <Badge className="bg-green-100 text-green-800">Terminé</Badge>
+      case "cancelled":
+        return <Badge className="bg-red-100 text-red-800">Annulé</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
   }
 
-  const getContractTypeBadge = (type) => {
-    switch (type) {
-      case "Travaux":
-        return <Badge variant="outline" className="bg-blue-50">Travaux</Badge>
-      case "Services":
-        return <Badge variant="outline" className="bg-green-50">Services</Badge>
-      case "Fournitures":
-        return <Badge variant="outline" className="bg-purple-50">Fournitures</Badge>
-      case "Maintenance":
-        return <Badge variant="outline" className="bg-orange-50">Maintenance</Badge>
-      default:
-        return <Badge variant="outline">{type}</Badge>
+  // Get service badge
+  const getServiceBadge = (service) => {
+    const serviceColors = {
+      irrigation: "bg-blue-100 text-blue-800",
+      formation: "bg-green-100 text-green-800",
+      equipement: "bg-purple-100 text-purple-800",
+      infrastructure: "bg-orange-100 text-orange-800",
+      informatique: "bg-indigo-100 text-indigo-800",
+      maintenance: "bg-red-100 text-red-800"
     }
+    
+    return (
+      <Badge className={serviceColors[service] || "bg-gray-100 text-gray-800"}>
+        {service}
+      </Badge>
+    )
   }
 
-  const filteredMarkets = markets.filter(market => {
-    const matchesSearch = 
-      market.object.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      market.attributaire.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      market.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      market.service.toLowerCase().includes(searchTerm.toLowerCase())
+  // Calculate progress based on dates
+  const calculateProgress = (startDate, endDate) => {
+    if (!startDate || !endDate) return 0
     
-    const matchesStatus = statusFilter === "all" || market.status === statusFilter
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const now = new Date()
     
-    return matchesSearch && matchesStatus
-  })
-
-  const handleMarketSelect = (market) => {
-    onMarketSelect(market)
+    if (now < start) return 0
+    if (now > end) return 100
+    
+    const total = end - start
+    const elapsed = now - start
+    return Math.round((elapsed / total) * 100)
   }
 
-  const handleEditMarket = (market) => {
-    setSelectedMarketForEdit(market)
-    setIsEditMarketOpen(true)
+  if (loading && markets.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="ml-2">Chargement des marchés...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center p-6">
+        <p className="text-red-600 mb-4">Erreur lors du chargement des marchés: {error}</p>
+        <Button onClick={fetchMarkets} variant="outline">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Réessayer
+        </Button>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-4">
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtres</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="text-sm font-medium">Statut</label>
-              <Select value={statusFilter} onValueChange={statusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tous les statuts" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les statuts</SelectItem>
-                  <SelectItem value="active">En cours</SelectItem>
-                  <SelectItem value="completed">Terminé</SelectItem>
-                  <SelectItem value="delayed">En retard</SelectItem>
-                  <SelectItem value="pending">En attente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Service</label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tous les services" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les services</SelectItem>
-                  <SelectItem value="irrigation">Irrigation</SelectItem>
-                  <SelectItem value="formation">Formation</SelectItem>
-                  <SelectItem value="equipement">Équipement</SelectItem>
-                  <SelectItem value="infrastructure">Infrastructure</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Type de Contrat</label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tous les types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les types</SelectItem>
-                  <SelectItem value="travaux">Travaux</SelectItem>
-                  <SelectItem value="services">Services</SelectItem>
-                  <SelectItem value="fournitures">Fournitures</SelectItem>
-                  <SelectItem value="maintenance">Maintenance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Montant</label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tous les montants" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les montants</SelectItem>
-                  <SelectItem value="small">&lt; 1M MAD</SelectItem>
-                  <SelectItem value="medium">1M - 5M MAD</SelectItem>
-                  <SelectItem value="large">5M - 20M MAD</SelectItem>
-                  <SelectItem value="xlarge">&gt; 20M MAD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div className="space-y-6">
       {/* Markets Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Liste des Marchés Publics</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Liste des Marchés ({filteredMarkets.length})
+            </div>
+            <Button onClick={fetchMarkets} variant="outline" size="sm">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Actualiser
+            </Button>
+          </CardTitle>
           <CardDescription>
-            {filteredMarkets.length} marché(s) trouvé(s)
+            Gestion des marchés publics et suivi des contrats
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Numéro</TableHead>
-                <TableHead>Objet</TableHead>
-                <TableHead>Attributaire</TableHead>
-                <TableHead>Montant</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Progression</TableHead>
-                <TableHead>Échéance</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMarkets.map((market) => (
-                <TableRow key={market.id} className="cursor-pointer hover:bg-muted/50">
-                  <TableCell>
-                    <div className="font-medium">{market.number}</div>
-                    <div className="text-sm text-muted-foreground">{market.service}</div>
-                    {getContractTypeBadge(market.contractType)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-xs">
-                      <div className="font-medium">{market.object}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{market.attributaire}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">
-                      {market.amount.toLocaleString()} MAD
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(market.status)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-primary h-2 rounded-full" 
-                          style={{ width: `${market.progress}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium">{market.progress}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(market.endDate).toLocaleDateString("fr-FR")}
-                      </div>
-                      <div className="text-muted-foreground">
-                        {market.status === "active" && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {Math.ceil((new Date(market.endDate) - new Date()) / (1000 * 60 * 60 * 24))} jours restants
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleMarketSelect(market)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditMarket(market)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {filteredMarkets.length === 0 ? (
+            <div className="text-center py-8">
+              <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+              <p className="text-gray-600">Aucun marché trouvé</p>
+              {searchTerm || statusFilter !== 'all' ? (
+                <p className="text-sm text-gray-500 mt-2">
+                  Essayez de modifier vos filtres de recherche
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 mt-2">
+                  Commencez par créer votre premier marché
+                </p>
+              )}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Numéro</TableHead>
+                  <TableHead>Objet</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Attributaire</TableHead>
+                  <TableHead>Montant</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Dates</TableHead>
+                  <TableHead>Progression</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredMarkets.map((market) => {
+                  const progress = calculateProgress(market.expected_start_date, market.expected_end_date)
+                  
+                  return (
+                    <TableRow key={market.id}>
+                      <TableCell className="font-mono text-sm">
+                        {market.number}
+                      </TableCell>
+                      <TableCell className="max-w-xs">
+                        <div className="truncate" title={market.object}>
+                          {market.object}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getServiceBadge(market.service)}
+                      </TableCell>
+                      <TableCell>
+                        {market.attributaire || 'Non attribué'}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {formatCurrency(market.estimated_amount, market.currency)}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(market.status)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm space-y-1">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            <span>Début: {formatDate(market.expected_start_date)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Fin: {formatDate(market.expected_end_date)}</span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                          <span className="text-sm text-gray-600">{progress}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onMarketSelect(market)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedMarketForEdit(market)
+                              setIsEditMarketOpen(true)
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteMarket(market.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -312,116 +286,24 @@ export function MarketsList({ searchTerm, statusFilter, onMarketSelect }) {
           <DialogHeader>
             <DialogTitle>Modifier le Marché</DialogTitle>
             <DialogDescription>
-              Modifiez les détails du marché {selectedMarketForEdit?.number}
+              Modifiez les informations du marché sélectionné
             </DialogDescription>
           </DialogHeader>
-          {selectedMarketForEdit && (
-            <EditMarketForm 
-              market={selectedMarketForEdit}
-              onSuccess={() => setIsEditMarketOpen(false)}
-            />
-          )}
+          <EditMarketForm 
+            market={selectedMarketForEdit}
+            onSuccess={() => {
+              setIsEditMarketOpen(false)
+              setSelectedMarketForEdit(null)
+              // Refresh the markets list
+              if (onRefresh) onRefresh()
+            }}
+            onCancel={() => {
+              setIsEditMarketOpen(false)
+              setSelectedMarketForEdit(null)
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-// Edit Market Form Component
-function EditMarketForm({ market, onSuccess }) {
-  const [formData, setFormData] = useState({
-    object: market.object,
-    attributaire: market.attributaire,
-    amount: market.amount,
-    status: market.status,
-    startDate: market.startDate,
-    endDate: market.endDate,
-    service: market.service,
-    contractType: market.contractType
-  })
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    // Here you would update the market in your database
-    console.log("Updating market:", formData)
-    onSuccess()
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="object">Objet du Marché</Label>
-          <Input
-            id="object"
-            value={formData.object}
-            onChange={(e) => setFormData({...formData, object: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="attributaire">Attributaire</Label>
-          <Input
-            id="attributaire"
-            value={formData.attributaire}
-            onChange={(e) => setFormData({...formData, attributaire: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="amount">Montant (MAD)</Label>
-          <Input
-            id="amount"
-            type="number"
-            value={formData.amount}
-            onChange={(e) => setFormData({...formData, amount: parseInt(e.target.value)})}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="status">Statut</Label>
-          <Select value={formData.status} onValueChange={(value) => setFormData({...formData, status: value})}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">En attente</SelectItem>
-              <SelectItem value="active">En cours</SelectItem>
-              <SelectItem value="completed">Terminé</SelectItem>
-              <SelectItem value="delayed">En retard</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="startDate">Date de Début</Label>
-          <Input
-            id="startDate"
-            type="date"
-            value={formData.startDate}
-            onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="endDate">Date de Fin</Label>
-          <Input
-            id="endDate"
-            type="date"
-            value={formData.endDate}
-            onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-            required
-          />
-        </div>
-      </div>
-      
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onSuccess}>
-          Annuler
-        </Button>
-        <Button type="submit">
-          Sauvegarder les Modifications
-        </Button>
-      </div>
-    </form>
   )
 } 

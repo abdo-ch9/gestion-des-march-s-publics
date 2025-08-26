@@ -5,107 +5,54 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"
-import { Eye, Edit, Trash2, AlertTriangle, Clock, CheckCircle } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
+import { Eye, Edit, Trash2, AlertTriangle, Clock, CheckCircle, ChevronDown } from "lucide-react"
 import { EditContractModal } from "./edit-contract-modal"
+import { useContracts } from "../../lib/hooks/use-contracts"
+import { toast } from "sonner"
 
-export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy, onViewDetails, userRole }) {
+export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy, onViewDetails, userRole, contracts = [], onRefresh }) {
   const [editingContract, setEditingContract] = useState(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(null)
+  const [deletingContract, setDeletingContract] = useState(null)
+  const { updateContractStatus, deleteContract } = useContracts()
 
-  // Debug: Log the userRole to see what's being received
-  console.log("ContractsList - userRole received:", userRole)
-  console.log("ContractsList - userRole type:", typeof userRole)
-  console.log("ContractsList - userRole === 'admin':", userRole === "admin")
-  console.log("ContractsList - userRole === 'agent':", userRole === "agent")
+  // Helper function to safely format currency
+  const formatCurrency = (amount) => {
+    if (amount === null || amount === undefined) return '0 DH'
+    return Number(amount).toLocaleString('fr-FR') + ' DH'
+  }
 
-  // Mock data - replace with real data from Supabase
-  const contracts = [
-    {
-      id: 1,
-      number: "CTR-2024-001",
-      subject: "Réhabilitation du réseau d'eau potable",
-      awardee: "Entreprise ABC",
-      initialAmount: 450000,
-      notificationDate: "2024-01-15",
-      startDate: "2024-02-01",
-      duration: 180,
-      status: "active",
-      service: "eau",
-      deadline: "2024-08-01",
-      consumedDays: 45,
-      remainingDays: 135,
-      isOverdue: false,
-      isNearDeadline: false
-    },
-    {
-      id: 2,
-      number: "CTR-2024-002",
-      subject: "Construction station d'épuration",
-      awardee: "Société XYZ",
-      initialAmount: 1200000,
-      notificationDate: "2024-01-20",
-      startDate: "2024-02-15",
-      duration: 365,
-      status: "active",
-      service: "assainissement",
-      deadline: "2025-02-15",
-      consumedDays: 30,
-      remainingDays: 335,
-      isOverdue: false,
-      isNearDeadline: false
-    },
-    {
-      id: 3,
-      number: "CTR-2024-003",
-      subject: "Maintenance système d'irrigation",
-      awardee: "Technique Plus",
-      initialAmount: 180000,
-      notificationDate: "2024-01-10",
-      startDate: "2024-01-25",
-      duration: 90,
-      status: "overdue",
-      service: "irrigation",
-      deadline: "2024-04-25",
-      consumedDays: 90,
-      remainingDays: 0,
-      isOverdue: true,
-      isNearDeadline: false
-    },
-    {
-      id: 4,
-      number: "CTR-2024-004",
-      subject: "Rénovation pompes de relevage",
-      awardee: "Mécanique Pro",
-      initialAmount: 320000,
-      notificationDate: "2024-01-05",
-      startDate: "2024-01-20",
-      duration: 120,
-      status: "active",
-      service: "maintenance",
-      deadline: "2024-05-20",
-      consumedDays: 75,
-      remainingDays: 45,
-      isOverdue: false,
-      isNearDeadline: true
-    },
-    {
-      id: 5,
-      number: "CTR-2024-005",
-      subject: "Extension réseau eau",
-      awardee: "Hydraulique SA",
-      initialAmount: 650000,
-      notificationDate: "2024-01-25",
-      startDate: "2024-02-10",
-      duration: 240,
-      status: "active",
-      service: "eau",
-      deadline: "2024-10-10",
-      consumedDays: 25,
-      remainingDays: 215,
-      isOverdue: false,
-      isNearDeadline: false
+  // Helper function to safely format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    try {
+      return new Date(dateString).toLocaleDateString('fr-FR')
+    } catch (error) {
+      return 'Date invalide'
     }
-  ]
+  }
+
+  // Helper function to get contract display data with fallbacks
+  const getContractDisplayData = (contract) => {
+    return {
+      id: contract.id,
+      number: contract.number || 'N/A',
+      subject: contract.subject || 'Sans objet',
+      awardee: contract.awardee || 'Non attribué',
+      initialAmount: contract.initial_amount || 0,
+      startDate: contract.start_date || null,
+      duration: contract.duration_days || 0,
+      status: contract.status || 'draft',
+      service: contract.service || 'non_specifie',
+      deadline: contract.deadline_date || null,
+      consumedDays: contract.consumed_days || 0,
+      remainingDays: contract.remaining_days || 0,
+      isOverdue: contract.is_overdue || false,
+      isNearDeadline: contract.is_near_deadline || false
+    }
+  }
 
   const getStatusBadge = (status, isOverdue, isNearDeadline) => {
     if (isOverdue) {
@@ -122,6 +69,12 @@ export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy,
         return <Badge variant="secondary">Terminé</Badge>
       case "suspended":
         return <Badge variant="outline">Suspendu</Badge>
+      case "draft":
+        return <Badge variant="outline">Brouillon</Badge>
+      case "overdue":
+        return <Badge variant="destructive">En Retard</Badge>
+      case "cancelled":
+        return <Badge variant="outline">Annulé</Badge>
       default:
         return <Badge variant="outline">{status}</Badge>
     }
@@ -172,18 +125,63 @@ export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy,
     setIsEditModalOpen(true)
   }
 
-  const handleDelete = (contractId) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer ce contrat ?")) {
-      // TODO: Implement delete functionality with Supabase
-      console.log("Deleting contract:", contractId)
+  const handleDelete = async (contractId) => {
+    if (!userRole || userRole !== "admin") {
+      toast.error("Vous n'avez pas les permissions pour supprimer des contrats")
+      return
+    }
+
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce contrat ? Cette action est irréversible.")) {
+      return
+    }
+
+    setDeletingContract(contractId)
+    
+    try {
+      await deleteContract(contractId)
+      toast.success("Contrat supprimé avec succès")
+      
+      // Refresh the contracts list if callback provided
+      if (onRefresh) {
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Error deleting contract:', error)
+      toast.error(`Erreur lors de la suppression: ${error.message}`)
+    } finally {
+      setDeletingContract(null)
+    }
+  }
+
+  const handleStatusChange = async (contractId, newStatus) => {
+    if (!userRole || (userRole !== "admin" && userRole !== "agent")) {
+      toast.error("Vous n'avez pas les permissions pour modifier le statut")
+      return
+    }
+
+    setUpdatingStatus(contractId)
+    
+    try {
+      await updateContractStatus(contractId, newStatus)
+      toast.success(`Statut du contrat mis à jour vers "${newStatus}"`)
+      
+      // Refresh the contracts list if callback provided
+      if (onRefresh) {
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Error updating contract status:', error)
+      toast.error(`Erreur lors de la mise à jour du statut: ${error.message}`)
+    } finally {
+      setUpdatingStatus(null)
     }
   }
 
   const filteredContracts = contracts.filter(contract => {
     const matchesSearch = 
-      contract.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contract.awardee.toLowerCase().includes(searchTerm.toLowerCase())
+      (contract.number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (contract.subject || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (contract.awardee || '').toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = statusFilter === "all" || contract.status === statusFilter
     const matchesService = serviceFilter === "all" || contract.service === serviceFilter
@@ -194,17 +192,25 @@ export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy,
   const sortedContracts = [...filteredContracts].sort((a, b) => {
     switch (sortBy) {
       case "amount":
-        return b.initialAmount - a.initialAmount
+        return (b.initial_amount || 0) - (a.initial_amount || 0)
       case "date":
-        return new Date(b.startDate) - new Date(a.startDate)
+        return new Date(b.start_date || 0) - new Date(a.start_date || 0)
       case "deadline":
-        return new Date(a.deadline) - new Date(b.deadline)
+        return new Date(a.deadline_date || 0) - new Date(b.deadline_date || 0)
       case "status":
-        return a.status.localeCompare(b.status)
+        return (a.status || '').localeCompare(b.status || '')
       default:
         return 0
     }
   })
+
+  const statusOptions = [
+    { value: 'draft', label: 'Brouillon' },
+    { value: 'active', label: 'En Cours' },
+    { value: 'completed', label: 'Terminé' },
+    { value: 'suspended', label: 'Suspendu' },
+    { value: 'cancelled', label: 'Annulé' }
+  ]
 
   return (
     <div className="space-y-4">
@@ -246,77 +252,118 @@ export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy,
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedContracts.map((contract) => (
-                  <TableRow 
-                    key={contract.id}
-                    className={contract.isOverdue ? "bg-red-50" : contract.isNearDeadline ? "bg-orange-50" : ""}
-                  >
-                    <TableCell className="font-medium">{contract.number}</TableCell>
-                    <TableCell className="max-w-xs truncate" title={contract.subject}>
-                      {contract.subject}
-                    </TableCell>
-                    <TableCell>{contract.awardee}</TableCell>
-                    <TableCell>
-                      {contract.initialAmount.toLocaleString('fr-FR')} DH
-                    </TableCell>
-                    <TableCell>
-                      {new Date(contract.startDate).toLocaleDateString('fr-FR')}
-                    </TableCell>
-                    <TableCell>{contract.duration} jours</TableCell>
-                    <TableCell>
-                      {getDeadlineStatus(contract)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        {getStatusBadge(contract.status, contract.isOverdue, contract.isNearDeadline)}
-                        {getServiceBadge(contract.service)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center space-x-2">
-                        {/* 🔍 Voir détails - Toujours disponible */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onViewDetails(contract)}
-                          title="Voir détails"
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        >
-                          <Eye className="w-4 h-4 mr-1" />
-                          <span className="hidden sm:inline">Détails</span>
-                        </Button>
-                        
-                        {/* ✏️ Modifier - Admin et Agent */}
-                        {(userRole === "admin" || userRole === "agent") && (
+                {sortedContracts.map((contract) => {
+                  const displayData = getContractDisplayData(contract)
+                  return (
+                    <TableRow 
+                      key={contract.id}
+                      className={displayData.isOverdue ? "bg-red-50" : displayData.isNearDeadline ? "bg-orange-50" : ""}
+                    >
+                      <TableCell className="font-medium">{displayData.number}</TableCell>
+                      <TableCell className="max-w-xs truncate" title={displayData.subject}>
+                        {displayData.subject}
+                      </TableCell>
+                      <TableCell>{displayData.awardee}</TableCell>
+                      <TableCell>
+                        {formatCurrency(displayData.initialAmount)}
+                      </TableCell>
+                      <TableCell>
+                        {formatDate(displayData.startDate)}
+                      </TableCell>
+                      <TableCell>{displayData.duration} jours</TableCell>
+                      <TableCell>
+                        {getDeadlineStatus(displayData)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-2">
+                          {/* Status Badge */}
+                          {getStatusBadge(displayData.status, displayData.isOverdue, displayData.isNearDeadline)}
+                          
+                          {/* Status Change Dropdown - Admin and Agent only */}
+                          {(userRole === "admin" || userRole === "agent") && (
+                            <div className="flex items-center space-x-2">
+                              <Select
+                                value={displayData.status}
+                                onValueChange={(newStatus) => handleStatusChange(contract.id, newStatus)}
+                                disabled={updatingStatus === contract.id}
+                              >
+                                <SelectTrigger className="w-32 h-8 text-xs">
+                                  <SelectValue placeholder="Changer statut" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {statusOptions.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {updatingStatus === contract.id && (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Service Badge */}
+                          {getServiceBadge(displayData.service)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center space-x-2">
+                          {/* 🔍 Voir détails - Toujours disponible */}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleEdit(contract)}
-                            title="Modifier"
-                            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            onClick={() => onViewDetails(contract)}
+                            title="Voir détails"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                           >
-                            <Edit className="w-4 h-4 mr-1" />
-                            <span className="hidden sm:inline">Modifier</span>
+                            <Eye className="w-4 h-4 mr-1" />
+                            <span className="hidden sm:inline">Détails</span>
                           </Button>
-                        )}
-                        
-                        {/* 🗑️ Supprimer - Admin uniquement */}
-                        {userRole === "admin" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(contract.id)}
-                            title="Supprimer"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4 mr-1" />
-                            <span className="hidden sm:inline">Supprimer</span>
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          
+                          {/* ✏️ Modifier - Admin et Agent */}
+                          {(userRole === "admin" || userRole === "agent") && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(contract)}
+                              title="Modifier"
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              <span className="hidden sm:inline">Modifier</span>
+                            </Button>
+                          )}
+                          
+                          {/* 🗑️ Supprimer - Admin uniquement */}
+                          {userRole === "admin" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(contract.id)}
+                              title="Supprimer"
+                              disabled={deletingContract === contract.id}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {deletingContract === contract.id ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600 mr-1"></div>
+                                  <span className="hidden sm:inline">Suppression...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  <span className="hidden sm:inline">Supprimer</span>
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>

@@ -1,120 +1,124 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
-import { Input } from "../../components/ui/input"
-import { Label } from "../../components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog"
 import { Badge } from "../../components/ui/badge"
 import { Progress } from "../../components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { 
   DollarSign, 
-  Calendar, 
-  Plus, 
-  Edit, 
-  Eye, 
   TrendingUp, 
-  AlertTriangle,
+  TrendingDown, 
+  AlertTriangle, 
   CheckCircle,
-  Clock
+  Clock,
+  Calendar
 } from "lucide-react"
+import { useMarkets } from "../../lib/hooks/use-markets"
 
 export function FinancialTracking() {
-  const [isAddSettlementOpen, setIsAddSettlementOpen] = useState(false)
-  const [selectedSettlement, setSelectedSettlement] = useState(null)
+  const { markets, loading, error } = useMarkets()
+  const [selectedPeriod, setSelectedPeriod] = useState("month")
 
-  // Mock data for financial settlements
-  const settlements = [
-    {
-      id: "SET-001",
-      marketNumber: "MP-2024-001",
-      marketObject: "Installation Système d'Irrigation",
-      settlementNumber: "Décompte 1",
-      amount: 850000,
-      percentage: 34,
-      status: "validated",
-      submissionDate: "2024-03-15",
-      validationDate: "2024-03-20",
-      validator: "Ahmed Benali",
-      notes: "Décompte validé pour la première phase"
-    },
-    {
-      id: "SET-002",
-      marketNumber: "MP-2024-001",
-      marketObject: "Installation Système d'Irrigation",
-      settlementNumber: "Décompte 2",
-      amount: 1200000,
-      percentage: 48,
-      status: "pending",
-      submissionDate: "2024-04-01",
-      validationDate: null,
-      validator: null,
-      notes: "En attente de validation"
-    },
-    {
-      id: "SET-003",
-      marketNumber: "MP-2024-003",
-      marketObject: "Maintenance Équipements",
-      settlementNumber: "Décompte 1",
-      amount: 450000,
-      percentage: 37.5,
-      status: "rejected",
-      submissionDate: "2024-03-10",
-      validationDate: "2024-03-12",
-      validator: "Fatima Zahra",
-      notes: "Rejeté - documents incomplets"
-    },
-    {
-      id: "SET-004",
-      marketNumber: "MP-2024-004",
-      marketObject: "Construction Bâtiment Administratif",
-      settlementNumber: "Décompte 1",
-      amount: 3750000,
-      percentage: 25,
-      status: "validated",
-      submissionDate: "2024-03-25",
-      validationDate: "2024-03-28",
-      validator: "Mohammed Alami",
-      notes: "Validation pour la fondation"
-    }
-  ]
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case "validated":
-        return <Badge className="bg-green-100 text-green-800">Validé</Badge>
-      case "pending":
-        return <Badge className="bg-yellow-100 text-yellow-800">En attente</Badge>
-      case "rejected":
-        return <Badge className="bg-red-100 text-red-800">Rejeté</Badge>
-      case "draft":
-        return <Badge variant="outline">Brouillon</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
+  // Calculate real financial data from markets
+  const financialData = {
+    totalBudget: markets.reduce((sum, m) => sum + (m.estimated_amount || 0), 0),
+    committedAmount: markets.reduce((sum, m) => {
+      if (m.status === 'in_progress' || m.status === 'completed') {
+        return sum + (m.estimated_amount || 0)
+      }
+      return sum
+    }, 0),
+    remainingBudget: markets.reduce((sum, m) => {
+      if (m.status === 'draft' || m.status === 'published') {
+        return sum + (m.estimated_amount || 0)
+      }
+      return sum
+    }, 0),
+    completedValue: markets.reduce((sum, m) => {
+      if (m.status === 'completed') {
+        return sum + (m.estimated_amount || 0)
+      }
+      return sum
+    }, 0),
+    delayedValue: markets.reduce((sum, m) => {
+      if (m.expected_end_date && m.status === 'in_progress') {
+        const endDate = new Date(m.expected_end_date)
+        const today = new Date()
+        if (endDate < today) {
+          return sum + (m.estimated_amount || 0)
+        }
+      }
+      return sum
+    }, 0)
   }
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "validated":
-        return <CheckCircle className="w-4 h-4 text-green-600" />
-      case "pending":
-        return <Clock className="w-4 h-4 text-yellow-600" />
-      case "rejected":
-        return <AlertTriangle className="w-4 h-4 text-red-600" />
-      default:
-        return <Clock className="w-4 h-4 text-gray-600" />
+  // Calculate percentages
+  const commitmentRate = financialData.totalBudget > 0 ? 
+    (financialData.committedAmount / financialData.totalBudget) * 100 : 0
+  const completionRate = financialData.totalBudget > 0 ? 
+    (financialData.completedValue / financialData.totalBudget) * 100 : 0
+  const delayRate = financialData.totalBudget > 0 ? 
+    (financialData.delayedValue / financialData.totalBudget) * 100 : 0
+
+  // Get markets by budget source
+  const marketsBySource = markets.reduce((acc, market) => {
+    const source = market.budget_source || 'Non spécifié'
+    if (!acc[source]) {
+      acc[source] = { count: 0, total: 0, markets: [] }
     }
+    acc[source].count++
+    acc[source].total += market.estimated_amount || 0
+    acc[source].markets.push(market)
+    return acc
+  }, {})
+
+  // Get markets by service
+  const marketsByService = markets.reduce((acc, market) => {
+    const service = market.service || 'Non spécifié'
+    if (!acc[service]) {
+      acc[service] = { count: 0, total: 0, markets: [] }
+    }
+    acc[service].count++
+    acc[service].total += market.estimated_amount || 0
+    acc[service].markets.push(market)
+    return acc
+  }, {})
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("fr-MA", {
+      style: "currency",
+      currency: "MAD",
+      minimumFractionDigits: 0,
+    }).format(amount)
   }
 
-  // Calculate totals
-  const totalAmount = settlements.reduce((sum, s) => sum + s.amount, 0)
-  const validatedAmount = settlements.filter(s => s.status === "validated").reduce((sum, s) => sum + s.amount, 0)
-  const pendingAmount = settlements.filter(s => s.status === "pending").reduce((sum, s) => sum + s.amount, 0)
-  const rejectedAmount = settlements.filter(s => s.status === "rejected").reduce((sum, s) => sum + s.amount, 0)
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-center space-x-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            <span className="text-muted-foreground">Chargement des données financières...</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="pt-6">
+          <div className="flex items-center space-x-2 text-red-600">
+            <span>⚠️ Erreur lors du chargement des données financières:</span>
+            <span className="font-medium">{error}</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -122,363 +126,208 @@ export function FinancialTracking() {
       <div className="flex justify-between items-start">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Suivi Financier</h2>
-          <p className="text-muted-foreground">Gestion des décomptes financiers et validations</p>
+          <p className="text-muted-foreground">
+            Suivi des budgets et des engagements financiers des marchés
+          </p>
         </div>
-        <Dialog open={isAddSettlementOpen} onOpenChange={setIsAddSettlementOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Nouveau Décompte
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Ajouter un Décompte Financier</DialogTitle>
-              <DialogDescription>
-                Enregistrez un nouveau décompte pour un marché
-              </DialogDescription>
-            </DialogHeader>
-            <AddSettlementForm onSuccess={() => setIsAddSettlementOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button 
+            variant={selectedPeriod === "month" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setSelectedPeriod("month")}
+          >
+            Mois
+          </Button>
+          <Button 
+            variant={selectedPeriod === "quarter" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setSelectedPeriod("quarter")}
+          >
+            Trimestre
+          </Button>
+          <Button 
+            variant={selectedPeriod === "year" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setSelectedPeriod("year")}
+          >
+            Année
+          </Button>
+        </div>
       </div>
 
-      {/* Financial Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Financial Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Décomptes</CardTitle>
+            <CardTitle className="text-sm font-medium">Budget Total</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
-              {totalAmount.toLocaleString()} MAD
+              {formatCurrency(financialData.totalBudget)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {settlements.length} décompte(s)
+              Montant total des marchés
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Validés</CardTitle>
+            <CardTitle className="text-sm font-medium">Engagements</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {formatCurrency(financialData.committedAmount)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {commitmentRate.toFixed(1)}% du budget total
+            </p>
+            <Progress value={commitmentRate} className="h-2 mt-2" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Budget Restant</CardTitle>
+            <TrendingDown className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {formatCurrency(financialData.remainingBudget)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Disponible pour nouveaux marchés
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Marchés Terminés</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {validatedAmount.toLocaleString()} MAD
+              {formatCurrency(financialData.completedValue)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {settlements.filter(s => s.status === "validated").length} décompte(s)
+              {completionRate.toFixed(1)}% du budget total
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">En Attente</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {pendingAmount.toLocaleString()} MAD
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {settlements.filter(s => s.status === "pending").length} décompte(s)
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejetés</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {rejectedAmount.toLocaleString()} MAD
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {settlements.filter(s => s.status === "rejected").length} décompte(s)
-            </p>
+            <Progress value={completionRate} className="h-2 mt-2" />
           </CardContent>
         </Card>
       </div>
 
-      {/* Settlements Table */}
+      {/* Budget Distribution by Source */}
       <Card>
         <CardHeader>
-          <CardTitle>Décomptes Financiers</CardTitle>
+          <CardTitle>Répartition par Source de Budget</CardTitle>
           <CardDescription>
-            Suivi de tous les décomptes et leurs statuts de validation
+            Répartition des marchés selon leur source de financement
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Marché</TableHead>
-                <TableHead>Décompte</TableHead>
-                <TableHead>Montant</TableHead>
-                <TableHead>Pourcentage</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Validateur</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {settlements.map((settlement) => (
-                <TableRow key={settlement.id} className="hover:bg-muted/50">
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{settlement.marketNumber}</div>
-                      <div className="text-sm text-muted-foreground max-w-xs truncate">
-                        {settlement.marketObject}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{settlement.settlementNumber}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">
-                      {settlement.amount.toLocaleString()} MAD
-                    </div>
-                  </TableCell>
-                  <TableCell>
+          {Object.keys(marketsBySource).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Aucune donnée de source de budget disponible
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(marketsBySource).map(([source, data]) => (
+                <div key={source} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">{source}</span>
                     <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-primary h-2 rounded-full" 
-                          style={{ width: `${settlement.percentage}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium">{settlement.percentage}%</span>
+                      <span className="text-sm text-muted-foreground">
+                        {data.count} marché{data.count !== 1 ? 's' : ''}
+                      </span>
+                      <span className="font-medium">
+                        {formatCurrency(data.total)}
+                      </span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(settlement.status)}
-                      {getStatusBadge(settlement.status)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm space-y-1">
-                      <div>
-                        <span className="text-muted-foreground">Soumis:</span>
-                        <br />
-                        {new Date(settlement.submissionDate).toLocaleDateString("fr-FR")}
-                      </div>
-                      {settlement.validationDate && (
-                        <div>
-                          <span className="text-muted-foreground">Validé:</span>
-                          <br />
-                          {new Date(settlement.validationDate).toLocaleDateString("fr-FR")}
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {settlement.validator || (
-                        <span className="text-muted-foreground">Non assigné</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedSettlement(settlement)}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedSettlement(settlement)
-                          setIsAddSettlementOpen(true)
-                        }}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                  <Progress 
+                    value={financialData.totalBudget > 0 ? (data.total / financialData.totalBudget) * 100 : 0} 
+                    className="h-2" 
+                  />
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Settlement Details Dialog */}
-      {selectedSettlement && (
-        <Dialog open={!!selectedSettlement} onOpenChange={() => setSelectedSettlement(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Détails du Décompte</DialogTitle>
-              <DialogDescription>
-                {selectedSettlement.settlementNumber} - {selectedSettlement.marketNumber}
-              </DialogDescription>
-            </DialogHeader>
-            <SettlementDetails settlement={selectedSettlement} />
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
-  )
-}
+      {/* Budget Distribution by Service */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Répartition par Service</CardTitle>
+          <CardDescription>
+            Répartition des marchés selon le service responsable
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {Object.keys(marketsByService).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Aucune donnée de service disponible
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(marketsByService).map(([service, data]) => (
+                <div key={service} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">{service}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {data.count} marché{data.count !== 1 ? 's' : ''}
+                      </span>
+                      <span className="font-medium">
+                        {formatCurrency(data.total)}
+                      </span>
+                    </div>
+                  </div>
+                  <Progress 
+                    value={financialData.totalBudget > 0 ? (data.total / financialData.totalBudget) * 100 : 0} 
+                    className="h-2" 
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-// Add Settlement Form Component
-function AddSettlementForm({ onSuccess }) {
-  const [formData, setFormData] = useState({
-    marketNumber: "",
-    settlementNumber: "",
-    amount: "",
-    percentage: "",
-    notes: "",
-    submissionDate: new Date().toISOString().split('T')[0]
-  })
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    // Here you would save the settlement to your database
-    console.log("Adding new settlement:", formData)
-    onSuccess()
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="marketNumber">Numéro du Marché</Label>
-          <Input
-            id="marketNumber"
-            value={formData.marketNumber}
-            onChange={(e) => setFormData({...formData, marketNumber: e.target.value})}
-            placeholder="MP-2024-001"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="settlementNumber">Numéro du Décompte</Label>
-          <Input
-            id="settlementNumber"
-            value={formData.settlementNumber}
-            onChange={(e) => setFormData({...formData, settlementNumber: e.target.value})}
-            placeholder="Décompte 1"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="amount">Montant (MAD)</Label>
-          <Input
-            id="amount"
-            type="number"
-            value={formData.amount}
-            onChange={(e) => setFormData({...formData, amount: e.target.value})}
-            placeholder="850000"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="percentage">Pourcentage (%)</Label>
-          <Input
-            id="percentage"
-            type="number"
-            value={formData.percentage}
-            onChange={(e) => setFormData({...formData, percentage: e.target.value})}
-            placeholder="34"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="submissionDate">Date de Soumission</Label>
-          <Input
-            id="submissionDate"
-            type="date"
-            value={formData.submissionDate}
-            onChange={(e) => setFormData({...formData, submissionDate: e.target.value})}
-            required
-          />
-        </div>
-      </div>
-      
-      <div>
-        <Label htmlFor="notes">Notes</Label>
-        <textarea
-          id="notes"
-          value={formData.notes}
-          onChange={(e) => setFormData({...formData, notes: e.target.value})}
-          placeholder="Notes sur le décompte..."
-          className="w-full p-3 border border-input rounded-md min-h-[100px]"
-        />
-      </div>
-      
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onSuccess}>
-          Annuler
-        </Button>
-        <Button type="submit">
-          Créer le Décompte
-        </Button>
-      </div>
-    </form>
-  )
-}
-
-// Settlement Details Component
-function SettlementDetails({ settlement }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <span className="font-medium">Marché:</span>
-          <p>{settlement.marketNumber}</p>
-        </div>
-        <div>
-          <span className="font-medium">Décompte:</span>
-          <p>{settlement.settlementNumber}</p>
-        </div>
-        <div>
-          <span className="font-medium">Montant:</span>
-          <p>{settlement.amount.toLocaleString()} MAD</p>
-        </div>
-        <div>
-          <span className="font-medium">Pourcentage:</span>
-          <p>{settlement.percentage}%</p>
-        </div>
-        <div>
-          <span className="font-medium">Statut:</span>
-          <p>{settlement.status}</p>
-        </div>
-        <div>
-          <span className="font-medium">Date de soumission:</span>
-          <p>{new Date(settlement.submissionDate).toLocaleDateString("fr-FR")}</p>
-        </div>
-        {settlement.validationDate && (
-          <div>
-            <span className="font-medium">Date de validation:</span>
-            <p>{new Date(settlement.validationDate).toLocaleDateString("fr-FR")}</p>
-          </div>
-        )}
-        {settlement.validator && (
-          <div>
-            <span className="font-medium">Validateur:</span>
-            <p>{settlement.validator}</p>
-          </div>
-        )}
-      </div>
-      
-      {settlement.notes && (
-        <div>
-          <span className="font-medium">Notes:</span>
-          <p className="mt-1 text-sm text-muted-foreground">{settlement.notes}</p>
-        </div>
+      {/* Delayed Projects Financial Impact */}
+      {financialData.delayedValue > 0 && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800">
+              <AlertTriangle className="h-5 w-5" />
+              Impact Financier des Retards
+            </CardTitle>
+            <CardDescription className="text-orange-700">
+              Marchés en retard et leur impact sur le budget
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Valeur des marchés en retard:</span>
+                <span className="text-xl font-bold text-orange-600">
+                  {formatCurrency(financialData.delayedValue)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Pourcentage du budget total:</span>
+                <span className="text-lg font-medium text-orange-600">
+                  {delayRate.toFixed(1)}%
+                </span>
+              </div>
+              <Progress value={delayRate} className="h-2" />
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

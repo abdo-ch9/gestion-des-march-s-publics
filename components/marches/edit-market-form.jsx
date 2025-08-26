@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
@@ -8,48 +8,140 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../../components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
-import { Calendar, DollarSign, FileText, Building, User, MapPin, Loader2 } from "lucide-react"
+import { Calendar, DollarSign, FileText, Building, Loader2 } from "lucide-react"
 import { useMarkets } from "../../lib/hooks/use-markets"
-import { useAuth } from "../../lib/auth-context"
 import { toast } from "sonner"
 
-export function AddMarketForm({ onSuccess }) {
-  const { user } = useAuth()
-  const { addMarket, loading, error } = useMarkets()
+export function EditMarketForm({ market, onSuccess, onCancel }) {
+  const { updateMarket, loading } = useMarkets()
   const [activeTab, setActiveTab] = useState("basic")
+  const [isFormReady, setIsFormReady] = useState(false)
+  
+  // Initialize form data directly from market prop
+  const getInitialFormData = (marketData) => {
+    if (!marketData || !marketData.id) {
+      return {
+        number: "",
+        object: "",
+        service: "",
+        contract_type: "",
+        procurement_method: "",
+        estimated_amount: "",
+        budget_source: "",
+        currency: "MAD",
+        publication_date: "",
+        submission_deadline: "",
+        expected_start_date: "",
+        expected_end_date: "",
+        attributaire: "",
+        attributaire_address: "",
+        attributaire_phone: "",
+        attributaire_email: "",
+        technical_specifications: "",
+        requirements: "",
+        deliverables: "",
+        notes: "",
+        status: "draft"
+      }
+    }
+    
+    return {
+      number: marketData.number || "",
+      object: marketData.object || "",
+      service: marketData.service || "irrigation",
+      contract_type: marketData.contract_type || "travaux",
+      procurement_method: marketData.procurement_method || "appel_offres",
+      estimated_amount: marketData.estimated_amount || "",
+      budget_source: marketData.budget_source || "budget_etat",
+      currency: marketData.currency || "MAD",
+      publication_date: marketData.publication_date || "",
+      submission_deadline: marketData.submission_deadline || "",
+      expected_start_date: marketData.expected_start_date || "",
+      expected_end_date: marketData.expected_end_date || "",
+      attributaire: marketData.attributaire || "",
+      attributaire_address: marketData.attributaire_address || "",
+      attributaire_phone: marketData.attributaire_phone || "",
+      attributaire_email: marketData.attributaire_email || "",
+      technical_specifications: marketData.technical_specifications || "",
+      requirements: marketData.requirements || "",
+      deliverables: marketData.deliverables || "",
+      notes: marketData.notes || "",
+      status: marketData.status || "draft"
+    }
+  }
+  
+  // Initialize with empty data first, then update when market prop is available
   const [formData, setFormData] = useState({
-    // Basic Information
     number: "",
     object: "",
     service: "",
     contract_type: "",
     procurement_method: "",
-    
-    // Financial Information
     estimated_amount: "",
     budget_source: "",
     currency: "MAD",
-    
-    // Dates and Deadlines
     publication_date: "",
     submission_deadline: "",
     expected_start_date: "",
     expected_end_date: "",
-    
-    // Contractor Information
     attributaire: "",
     attributaire_address: "",
     attributaire_phone: "",
     attributaire_email: "",
-    
-    // Technical Details
     technical_specifications: "",
     requirements: "",
     deliverables: "",
-    
-    // Additional Information
-    notes: ""
+    notes: "",
+    status: "draft"
   })
+
+  // Initialize form data when market prop changes
+  useEffect(() => {
+    console.log("useEffect triggered with market:", market)
+    console.log("useEffect triggered with market.id:", market?.id)
+    
+    if (market && market.id) {
+      console.log("Initializing form data with market:", market)
+      console.log("Market service:", market.service)
+      console.log("Market contract_type:", market.contract_type)
+      console.log("Market status:", market.status)
+      
+      // Get fresh initial data
+      const initialData = getInitialFormData(market)
+      
+      console.log("Setting initial form data:", initialData)
+      console.log("Initial service value:", initialData.service)
+      console.log("Initial contract_type value:", initialData.contract_type)
+      
+      // Force a complete state update
+      setFormData(initialData)
+      setIsFormReady(true)
+      
+      // Also log the current state after setting
+      setTimeout(() => {
+        console.log("Form data after setState:", initialData)
+        console.log("Current formData state should be:", initialData)
+      }, 0)
+    } else {
+      console.log("No market data provided or market.id is missing")
+      setIsFormReady(false)
+    }
+  }, [market?.id]) // Use market.id as dependency instead of the entire market object
+
+  // Add another useEffect to monitor formData changes
+  useEffect(() => {
+    console.log("formData changed to:", formData)
+  }, [formData])
+
+  // Force update form data when market changes (backup mechanism)
+  useEffect(() => {
+    if (market && market.id) {
+      const freshData = getInitialFormData(market)
+      console.log("Force update - setting fresh data:", freshData)
+      setFormData(freshData)
+      setIsFormReady(true)
+    }
+  }, [market])
 
   const cleanFormData = (data) => {
     // Define the valid database fields based on the schema
@@ -58,7 +150,7 @@ export function AddMarketForm({ onSuccess }) {
       'estimated_amount', 'budget_source', 'currency',
       'publication_date', 'submission_deadline', 'expected_start_date', 'expected_end_date',
       'attributaire', 'attributaire_address', 'attributaire_phone', 'attributaire_email',
-      'technical_specifications', 'requirements', 'deliverables', 'notes'
+      'technical_specifications', 'requirements', 'deliverables', 'notes', 'status'
     ]
     
     const cleaned = {}
@@ -66,8 +158,12 @@ export function AddMarketForm({ onSuccess }) {
     Object.entries(data).forEach(([key, value]) => {
       // Only include valid database fields
       if (validFields.includes(key)) {
-        // Only include non-empty strings and valid values
-        if (value !== '' && value !== null && value !== undefined) {
+        // Special handling for status - always include it
+        if (key === 'status') {
+          cleaned[key] = value
+        }
+        // For other fields, only include non-empty strings and valid values
+        else if (value !== '' && value !== null && value !== undefined) {
           cleaned[key] = value
         }
       }
@@ -78,16 +174,11 @@ export function AddMarketForm({ onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    if (!user) {
-      toast.error("Vous devez être connecté pour créer un marché")
-      return
-    }
 
     try {
-      console.log("Form submission started")
-      console.log("User:", user)
-      console.log("Form data:", formData)
+      console.log("Edit form submission started")
+      console.log("Original market:", market)
+      console.log("Current form data:", formData)
       
       // Validate required fields
       if (!formData.number || !formData.object || !formData.service || !formData.contract_type || !formData.procurement_method) {
@@ -97,6 +188,7 @@ export function AddMarketForm({ onSuccess }) {
 
       // Clean up the data and remove fields that don't exist in the database
       const cleanedData = cleanFormData(formData)
+      console.log("Cleaned data:", cleanedData)
       
       // Convert estimated_amount to number
       const marketData = {
@@ -104,14 +196,15 @@ export function AddMarketForm({ onSuccess }) {
         estimated_amount: cleanedData.estimated_amount ? parseFloat(cleanedData.estimated_amount) : null
       }
 
-      console.log("Calling addMarket with cleaned data:", marketData)
+      console.log("Final market data to send:", marketData)
+      console.log("Status value being sent:", marketData.status)
       
-      const result = await addMarket(marketData)
+      const result = await updateMarket(market.id, marketData)
       
-      console.log("addMarket result:", result)
+      console.log("updateMarket result:", result)
       
       if (result.success) {
-        toast.success("Marché créé avec succès!")
+        toast.success("Marché modifié avec succès!")
         onSuccess()
       }
     } catch (err) {
@@ -122,24 +215,47 @@ export function AddMarketForm({ onSuccess }) {
         name: err.name
       })
       
-      const errorMessage = err.message || "Erreur lors de la création du marché"
+      const errorMessage = err.message || "Erreur lors de la modification du marché"
       toast.error(errorMessage)
     }
   }
 
   const handleInputChange = (field, value) => {
+    console.log(`Updating ${field} to:`, value)
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const generateMarketNumber = () => {
-    const year = new Date().getFullYear()
-    const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    const marketNumber = `MP-${year}-${randomNum}`
-    handleInputChange('number', marketNumber)
+  const handleSelectChange = (field, value) => {
+    console.log(`Select updating ${field} to:`, value)
+    console.log(`Previous formData:`, formData)
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value }
+      console.log(`New formData after update:`, newData)
+      return newData
+    })
+  }
+
+  if (!market) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">Aucun marché sélectionné pour modification</p>
+      </div>
+    )
+  }
+
+  if (!isFormReady) {
+    return (
+      <div className="text-center py-8">
+        <div className="flex items-center justify-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <p className="text-muted-foreground">Chargement des données du marché...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form key={market?.id} onSubmit={handleSubmit} className="space-y-6">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="basic">Informations de Base</TabsTrigger>
@@ -164,22 +280,17 @@ export function AddMarketForm({ onSuccess }) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="number">Numéro du Marché *</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="number"
-                      value={formData.number}
-                      onChange={(e) => handleInputChange('number', e.target.value)}
-                      placeholder="MP-2024-001"
-                      required
-                    />
-                    <Button type="button" variant="outline" onClick={generateMarketNumber}>
-                      Générer
-                    </Button>
-                  </div>
+                  <Input
+                    id="number"
+                    value={formData.number}
+                    onChange={(e) => handleInputChange('number', e.target.value)}
+                    placeholder="MP-2024-001"
+                    required
+                  />
                 </div>
                 <div>
                   <Label htmlFor="service">Service Responsable *</Label>
-                  <Select value={formData.service} onValueChange={(value) => handleInputChange('service', value)}>
+                  <Select value={formData.service || "irrigation"} onValueChange={(value) => handleSelectChange('service', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner un service" />
                     </SelectTrigger>
@@ -192,10 +303,13 @@ export function AddMarketForm({ onSuccess }) {
                       <SelectItem value="maintenance">Maintenance</SelectItem>
                     </SelectContent>
                   </Select>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Current value: {formData.service || "undefined"}
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="contract_type">Type de Contrat *</Label>
-                  <Select value={formData.contract_type} onValueChange={(value) => handleInputChange('contract_type', value)}>
+                  <Select value={formData.contract_type || "travaux"} onValueChange={(value) => handleSelectChange('contract_type', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner le type" />
                     </SelectTrigger>
@@ -207,10 +321,13 @@ export function AddMarketForm({ onSuccess }) {
                       <SelectItem value="conseil">Conseil</SelectItem>
                     </SelectContent>
                   </Select>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Current value: {formData.contract_type || "undefined"}
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="procurement_method">Méthode de Passation *</Label>
-                  <Select value={formData.procurement_method} onValueChange={(value) => handleInputChange('procurement_method', value)}>
+                  <Select value={formData.procurement_method || "appel_offres"} onValueChange={(value) => handleSelectChange('procurement_method', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner la méthode" />
                     </SelectTrigger>
@@ -221,6 +338,31 @@ export function AddMarketForm({ onSuccess }) {
                       <SelectItem value="concurrence_restreinte">Concurrence Restreinte</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label htmlFor="status">Statut du Marché</Label>
+                  <Select 
+                    value={formData.status || "draft"} 
+                    onValueChange={(value) => {
+                      console.log("Status Select onValueChange called with:", value)
+                      console.log("Previous formData.status:", formData.status)
+                      handleSelectChange('status', value)
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner le statut" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Brouillon</SelectItem>
+                      <SelectItem value="published">Publié</SelectItem>
+                      <SelectItem value="in_progress">En cours</SelectItem>
+                      <SelectItem value="completed">Terminé</SelectItem>
+                      <SelectItem value="cancelled">Annulé</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Current value: {formData.status || "undefined"}
+                  </div>
                 </div>
               </div>
               
@@ -264,7 +406,7 @@ export function AddMarketForm({ onSuccess }) {
                 </div>
                 <div>
                   <Label htmlFor="currency">Devise</Label>
-                  <Select value={formData.currency} onValueChange={(value) => handleInputChange('currency', value)}>
+                  <Select value={formData.currency} onValueChange={(value) => handleSelectChange('currency', value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -277,7 +419,7 @@ export function AddMarketForm({ onSuccess }) {
                 </div>
                 <div>
                   <Label htmlFor="budget_source">Source du Budget</Label>
-                  <Select value={formData.budget_source} onValueChange={(value) => handleInputChange('budget_source', value)}>
+                  <Select value={formData.budget_source} onValueChange={(value) => handleSelectChange('budget_source', value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner la source" />
                     </SelectTrigger>
@@ -503,17 +645,17 @@ export function AddMarketForm({ onSuccess }) {
         </div>
         
         <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={onSuccess}>
+          <Button type="button" variant="outline" onClick={onCancel}>
             Annuler
           </Button>
           <Button type="submit" disabled={loading}>
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Création...
+                Modification...
               </>
             ) : (
-              "Créer le Marché"
+              "Modifier le Marché"
             )}
           </Button>
         </div>

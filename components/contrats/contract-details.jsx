@@ -4,18 +4,55 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"
 import { Plus, Edit, Calendar, DollarSign, AlertTriangle, CheckCircle, Clock, Eye } from "lucide-react"
 import { AddSettlementModal } from "./add-settlement-modal"
 import { AddDeadlineModal } from "./add-deadline-modal"
+import { useContracts } from "../../lib/hooks/use-contracts"
+import { toast } from "sonner"
 
-export function ContractDetails({ contract, open, onOpenChange, userRole }) {
+export function ContractDetails({ contract, open, onOpenChange, userRole, onRefresh }) {
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false)
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+  const { updateContractStatus } = useContracts()
 
   if (!contract) return null
+
+  const statusOptions = [
+    { value: 'draft', label: 'Brouillon' },
+    { value: 'active', label: 'En Cours' },
+    { value: 'completed', label: 'Terminé' },
+    { value: 'suspended', label: 'Suspendu' },
+    { value: 'cancelled', label: 'Annulé' }
+  ]
+
+  const handleStatusChange = async (newStatus) => {
+    if (!userRole || (userRole !== "admin" && userRole !== "agent")) {
+      toast.error("Vous n'avez pas les permissions pour modifier le statut")
+      return
+    }
+
+    setUpdatingStatus(true)
+    
+    try {
+      await updateContractStatus(contract.id, newStatus)
+      toast.success(`Statut du contrat mis à jour vers "${newStatus}"`)
+      
+      // Refresh the contracts list if callback provided
+      if (onRefresh) {
+        onRefresh()
+      }
+    } catch (error) {
+      console.error('Error updating contract status:', error)
+      toast.error(`Erreur lors de la mise à jour du statut: ${error.message}`)
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
 
   // Mock data - replace with real data from Supabase
   const settlements = [
@@ -98,6 +135,51 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Status Change Section */}
+          {(userRole === "admin" || userRole === "agent") && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardHeader>
+                <CardTitle className="text-lg">Changer le Statut du Contrat</CardTitle>
+                <CardDescription>
+                  Modifiez le statut du contrat selon son état actuel
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium">Statut actuel:</span>
+                    <Badge variant="outline" className="text-lg px-3 py-1">
+                      {statusOptions.find(opt => opt.value === contract.status)?.label || contract.status}
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm font-medium">Nouveau statut:</span>
+                    <Select
+                      value={contract.status}
+                      onValueChange={handleStatusChange}
+                      disabled={updatingStatus}
+                    >
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Sélectionner un statut" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {updatingStatus && (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Contract Overview */}
           <Card>
             <CardHeader>
@@ -107,19 +189,21 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Objet</p>
-                  <p className="font-medium">{contract.subject}</p>
+                  <p className="font-medium">{contract.subject || 'Non spécifié'}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Attributaire</p>
-                  <p className="font-medium">{contract.awardee}</p>
+                  <p className="font-medium">{contract.awardee || 'Non attribué'}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Montant initial</p>
-                  <p className="font-medium">{contract.initialAmount.toLocaleString('fr-FR')} DH</p>
+                  <p className="font-medium">
+                    {(contract.initial_amount || 0).toLocaleString('fr-FR')} DH
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Durée</p>
-                  <p className="font-medium">{contract.duration} jours</p>
+                  <p className="font-medium">{contract.duration_days || 0} jours</p>
                 </div>
               </div>
             </CardContent>
@@ -147,7 +231,7 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span>Montant initial</span>
-                        <span className="font-medium">{contract.initialAmount.toLocaleString('fr-FR')} DH</span>
+                        <span className="font-medium">{(contract.initial_amount || 0).toLocaleString('fr-FR')} DH</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Décomptes validés</span>
@@ -155,7 +239,7 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
                       </div>
                       <div className="flex justify-between">
                         <span>Solde restant</span>
-                        <span className="font-medium text-blue-600">{(contract.initialAmount - totalSettlements).toLocaleString('fr-FR')} DH</span>
+                        <span className="font-medium text-blue-600">{((contract.initial_amount || 0) - totalSettlements).toLocaleString('fr-FR')} DH</span>
                       </div>
                     </div>
                     <div className="pt-2 border-t">
@@ -178,29 +262,31 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span>Date de début</span>
-                        <span className="font-medium">{new Date(contract.startDate).toLocaleDateString('fr-FR')}</span>
+                        <span className="font-medium">
+                          {contract.start_date ? new Date(contract.start_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Délai initial</span>
-                        <span className="font-medium">{contract.duration} jours</span>
+                        <span className="font-medium">{contract.duration_days || 0} jours</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Jours consommés</span>
-                        <span className="font-medium">{contract.consumedDays} jours</span>
+                        <span className="font-medium">{contract.consumed_days || 0} jours</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Jours restants</span>
-                        <span className={`font-medium ${contract.remainingDays <= 30 ? 'text-orange-600' : 'text-green-600'}`}>
-                          {contract.remainingDays} jours
+                        <span className={`font-medium ${(contract.remaining_days || 0) <= 30 ? 'text-orange-600' : 'text-green-600'}`}>
+                          {contract.remaining_days || 0} jours
                         </span>
                       </div>
                     </div>
                     <div className="pt-2 border-t">
                       <div className="flex justify-between">
                         <span>Statut</span>
-                        {contract.isOverdue ? (
+                        {contract.is_overdue ? (
                           <Badge variant="destructive">En retard</Badge>
-                        ) : contract.isNearDeadline ? (
+                        ) : contract.is_near_deadline ? (
                           <Badge variant="outline" className="text-orange-600">Délai proche</Badge>
                         ) : (
                           <Badge variant="default">Dans les délais</Badge>
@@ -372,11 +458,11 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div 
                             className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(totalSettlements / contract.initialAmount) * 100}%` }}
+                            style={{ width: `${(totalSettlements / contract.initial_amount) * 100}%` }}
                           ></div>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {((totalSettlements / contract.initialAmount) * 100).toFixed(1)}% du montant initial
+                          {((totalSettlements / contract.initial_amount) * 100).toFixed(1)}% du montant initial
                         </p>
                       </div>
 
@@ -385,11 +471,11 @@ export function ContractDetails({ contract, open, onOpenChange, userRole }) {
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div 
                             className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(contract.consumedDays / contract.duration) * 100}%` }}
+                            style={{ width: `${(contract.consumed_days / contract.duration_days) * 100}%` }}
                           ></div>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {((contract.consumedDays / contract.duration) * 100).toFixed(1)}% du délai initial
+                          {((contract.consumed_days / contract.duration_days) * 100).toFixed(1)}% du délai initial
                         </p>
                       </div>
                     </div>

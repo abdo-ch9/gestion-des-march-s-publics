@@ -1,128 +1,161 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { Button } from "../../components/ui/button"
-import { Input } from "../../components/ui/input"
-import { Label } from "../../components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog"
 import { Badge } from "../../components/ui/badge"
 import { Progress } from "../../components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { 
   Calendar, 
   Clock, 
-  Plus, 
-  Edit, 
-  AlertTriangle,
+  AlertTriangle, 
   CheckCircle,
   TrendingUp,
-  CalendarDays
+  TrendingDown,
+  FileText
 } from "lucide-react"
+import { useMarkets } from "../../lib/hooks/use-markets"
 
 export function DeadlinesTracking() {
-  const [isAddExtensionOpen, setIsAddExtensionOpen] = useState(false)
-  const [selectedDeadline, setSelectedDeadline] = useState(null)
+  const { markets, loading, error } = useMarkets()
+  const [selectedPeriod, setSelectedPeriod] = useState("month")
+  const [filterStatus, setFilterStatus] = useState("all")
 
-  // Mock data for deadlines tracking
-  const deadlines = [
-    {
-      id: "DL-001",
-      marketNumber: "MP-2024-001",
-      marketObject: "Installation Système d'Irrigation",
-      originalEndDate: "2024-06-15",
-      currentEndDate: "2024-07-15",
-      extensionDays: 30,
-      extensionReason: "Retard dans la livraison des matériaux",
-      status: "extended",
-      progress: 65,
-      daysRemaining: 45,
-      isDelayed: false
-    },
-    {
-      id: "DL-002",
-      marketNumber: "MP-2024-003",
-      marketObject: "Maintenance Équipements",
-      originalEndDate: "2024-05-01",
-      currentEndDate: "2024-05-01",
-      extensionDays: 0,
-      extensionReason: null,
-      status: "delayed",
-      progress: 45,
-      daysRemaining: -15,
-      isDelayed: true
-    },
-    {
-      id: "DL-003",
-      marketNumber: "MP-2024-004",
-      marketObject: "Construction Bâtiment Administratif",
-      originalEndDate: "2025-03-01",
-      currentEndDate: "2025-03-01",
-      extensionDays: 0,
-      extensionReason: null,
-      status: "on_track",
-      progress: 25,
-      daysRemaining: 320,
-      isDelayed: false
-    },
-    {
-      id: "DL-004",
-      marketNumber: "MP-2024-002",
-      marketObject: "Formation Techniques Agricoles",
-      originalEndDate: "2024-02-28",
-      currentEndDate: "2024-02-28",
-      extensionDays: 0,
-      extensionReason: null,
-      status: "completed",
-      progress: 100,
-      daysRemaining: 0,
-      isDelayed: false
+  // Calculate real deadline data from markets
+  const deadlineData = {
+    totalMarkets: markets.length,
+    marketsWithDeadlines: markets.filter(m => m.expected_end_date).length,
+    marketsInProgress: markets.filter(m => m.status === 'in_progress').length,
+    marketsCompleted: markets.filter(m => m.status === 'completed').length,
+    marketsDelayed: markets.filter(m => {
+      if (m.expected_end_date && m.status === 'in_progress') {
+        const endDate = new Date(m.expected_end_date)
+        const today = new Date()
+        return endDate < today
+      }
+      return false
+    }).length,
+    marketsOnTime: markets.filter(m => {
+      if (m.expected_end_date && m.status === 'in_progress') {
+        const endDate = new Date(m.expected_end_date)
+        const today = new Date()
+        return endDate >= today
+      }
+      return false
+    }).length
+  }
+
+  // Calculate percentages
+  const onTimeRate = deadlineData.marketsInProgress > 0 ? 
+    (deadlineData.marketsOnTime / deadlineData.marketsInProgress) * 100 : 0
+  const delayedRate = deadlineData.marketsInProgress > 0 ? 
+    (deadlineData.marketsDelayed / deadlineData.marketsInProgress) * 100 : 0
+
+  // Get markets with deadlines for detailed tracking
+  const marketsWithDeadlines = markets
+    .filter(m => m.expected_end_date)
+    .map(market => {
+      const endDate = new Date(market.expected_end_date)
+      const today = new Date()
+      const daysRemaining = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24))
+      const isDelayed = daysRemaining < 0 && market.status === 'in_progress'
+      const isCompleted = market.status === 'completed'
+      
+      return {
+        ...market,
+        daysRemaining,
+        isDelayed,
+        isCompleted,
+        progress: isCompleted ? 100 : 
+          isDelayed ? Math.min(100, Math.max(0, 100 + (daysRemaining / 30) * 100)) : 
+          Math.min(100, Math.max(0, 100 - (daysRemaining / 30) * 100))
+      }
+    })
+    .sort((a, b) => {
+      if (a.isDelayed && !b.isDelayed) return -1
+      if (!a.isDelayed && b.isDelayed) return 1
+      return a.daysRemaining - b.daysRemaining
+    })
+
+  // Get markets by service for deadline analysis
+  const marketsByService = markets.reduce((acc, market) => {
+    if (market.expected_end_date) {
+      const service = market.service || 'Non spécifié'
+      if (!acc[service]) {
+        acc[service] = { total: 0, delayed: 0, onTime: 0, completed: 0 }
+      }
+      acc[service].total++
+      
+      if (market.status === 'completed') {
+        acc[service].completed++
+      } else if (market.status === 'in_progress') {
+        const endDate = new Date(market.expected_end_date)
+        const today = new Date()
+        if (endDate < today) {
+          acc[service].delayed++
+        } else {
+          acc[service].onTime++
+        }
+      }
     }
-  ]
+    return acc
+  }, {})
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case "on_track":
-        return <Badge className="bg-green-100 text-green-800">Dans les délais</Badge>
-      case "extended":
-        return <Badge className="bg-blue-100 text-blue-800">Prolongé</Badge>
-      case "delayed":
-        return <Badge className="bg-red-100 text-red-800">En retard</Badge>
-      case "completed":
-        return <Badge className="bg-gray-100 text-gray-800">Terminé</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
+  const getStatusBadge = (market) => {
+    if (market.isCompleted) {
+      return <Badge className="bg-green-100 text-green-800">Terminé</Badge>
+    } else if (market.isDelayed) {
+      return <Badge className="bg-red-100 text-red-800">En retard</Badge>
+    } else if (market.daysRemaining <= 7) {
+      return <Badge className="bg-orange-100 text-orange-800">Urgent</Badge>
+    } else if (market.daysRemaining <= 30) {
+      return <Badge className="bg-yellow-100 text-yellow-800">Proche</Badge>
+    } else {
+      return <Badge className="bg-blue-100 text-blue-800">Normal</Badge>
     }
   }
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "on_track":
-        return <CheckCircle className="w-4 h-4 text-green-600" />
-      case "extended":
-        return <CalendarDays className="w-4 h-4 text-blue-600" />
-      case "delayed":
-        return <AlertTriangle className="w-4 h-4 text-red-600" />
-      case "completed":
-        return <CheckCircle className="w-4 h-4 text-gray-600" />
-      default:
-        return <Clock className="w-4 h-4 text-gray-600" />
-    }
+  const getProgressColor = (market) => {
+    if (market.isCompleted) return "bg-green-500"
+    if (market.isDelayed) return "bg-red-500"
+    if (market.daysRemaining <= 7) return "bg-orange-500"
+    if (market.daysRemaining <= 30) return "bg-yellow-500"
+    return "bg-blue-500"
   }
 
-  // Calculate totals
-  const totalMarkets = deadlines.length
-  const onTrackMarkets = deadlines.filter(d => d.status === "on_track").length
-  const extendedMarkets = deadlines.filter(d => d.status === "extended").length
-  const delayedMarkets = deadlines.filter(d => d.status === "delayed").length
-  const completedMarkets = deadlines.filter(d => d.status === "completed").length
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("fr-FR", {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
 
-  const getDaysRemainingColor = (days) => {
-    if (days < 0) return "text-red-600"
-    if (days <= 30) return "text-orange-600"
-    if (days <= 90) return "text-yellow-600"
-    return "text-green-600"
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-center space-x-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            <span className="text-muted-foreground">Chargement des données de délais...</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="pt-6">
+          <div className="flex items-center space-x-2 text-red-600">
+            <span>⚠️ Erreur lors du chargement des données de délais:</span>
+            <span className="font-medium">{error}</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -131,59 +164,80 @@ export function DeadlinesTracking() {
       <div className="flex justify-between items-start">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Suivi des Délais</h2>
-          <p className="text-muted-foreground">Gestion des échéances et prolongations des marchés</p>
+          <p className="text-muted-foreground">
+            Suivi des échéances et des délais des marchés publics
+          </p>
         </div>
-        <Dialog open={isAddExtensionOpen} onOpenChange={setIsAddExtensionOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Demande de Prolongation
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Demande de Prolongation</DialogTitle>
-              <DialogDescription>
-                Demandez une prolongation pour un marché
-              </DialogDescription>
-            </DialogHeader>
-            <AddExtensionForm onSuccess={() => setIsAddExtensionOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button 
+            variant={selectedPeriod === "month" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setSelectedPeriod("month")}
+          >
+            Mois
+          </Button>
+          <Button 
+            variant={selectedPeriod === "quarter" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setSelectedPeriod("quarter")}
+          >
+            Trimestre
+          </Button>
+          <Button 
+            variant={selectedPeriod === "year" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setSelectedPeriod("year")}
+          >
+            Année
+          </Button>
+        </div>
       </div>
 
-      {/* Deadlines Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+      {/* Deadline Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Marchés</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{totalMarkets}</div>
-            <p className="text-xs text-muted-foreground">Marchés actifs</p>
+            <div className="text-2xl font-bold text-primary">
+              {deadlineData.totalMarkets}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Marchés enregistrés
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dans les Délais</CardTitle>
+            <CardTitle className="text-sm font-medium">Avec Délais</CardTitle>
+            <Calendar className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {deadlineData.marketsWithDeadlines}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Marchés avec échéances
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">À Temps</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{onTrackMarkets}</div>
-            <p className="text-xs text-muted-foreground">Sur la bonne voie</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Prolongés</CardTitle>
-            <CalendarDays className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{extendedMarkets}</div>
-            <p className="text-xs text-muted-foreground">Avec prolongation</p>
+            <div className="text-2xl font-bold text-green-600">
+              {deadlineData.marketsOnTime}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {onTimeRate.toFixed(1)}% des marchés en cours
+            </p>
+            <Progress value={onTimeRate} className="h-2 mt-2" />
           </CardContent>
         </Card>
 
@@ -193,287 +247,183 @@ export function DeadlinesTracking() {
             <AlertTriangle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{delayedMarkets}</div>
-            <p className="text-xs text-muted-foreground">Délais dépassés</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Terminés</CardTitle>
-            <CheckCircle className="h-4 w-4 text-gray-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-600">{completedMarkets}</div>
-            <p className="text-xs text-muted-foreground">Marchés achevés</p>
+            <div className="text-2xl font-bold text-red-600">
+              {deadlineData.marketsDelayed}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {delayedRate.toFixed(1)}% des marchés en cours
+            </p>
+            <Progress value={delayedRate} className="h-2 mt-2" />
           </CardContent>
         </Card>
       </div>
 
-      {/* Deadlines Table */}
+      {/* Deadline Analysis by Service */}
       <Card>
         <CardHeader>
-          <CardTitle>Suivi des Échéances</CardTitle>
+          <CardTitle>Analyse des Délais par Service</CardTitle>
           <CardDescription>
-            Détails des délais et prolongations pour chaque marché
+            Répartition des délais selon le service responsable
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Marché</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Prolongation</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Progression</TableHead>
-                <TableHead>Jours Restants</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {deadlines.map((deadline) => (
-                <TableRow key={deadline.id} className="hover:bg-muted/50">
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{deadline.marketNumber}</div>
-                      <div className="text-sm text-muted-foreground max-w-xs truncate">
-                        {deadline.marketObject}
-                      </div>
+          {Object.keys(marketsByService).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Aucune donnée de délai disponible
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(marketsByService).map(([service, data]) => (
+                <div key={service} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">{service}</span>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-green-600">
+                        {data.onTime} à temps
+                      </span>
+                      <span className="text-red-600">
+                        {data.delayed} en retard
+                      </span>
+                      <span className="text-blue-600">
+                        {data.completed} terminés
+                      </span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm space-y-1">
-                      <div>
-                        <span className="text-muted-foreground">Original:</span>
-                        <br />
-                        {new Date(deadline.originalEndDate).toLocaleDateString("fr-FR")}
-                      </div>
-                      {deadline.extensionDays > 0 && (
-                        <div>
-                          <span className="text-muted-foreground">Actuel:</span>
-                          <br />
-                          {new Date(deadline.currentEndDate).toLocaleDateString("fr-FR")}
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {deadline.extensionDays > 0 ? (
-                      <div className="text-sm">
-                        <div className="font-medium">+{deadline.extensionDays} jours</div>
-                        <div className="text-muted-foreground text-xs">
-                          {deadline.extensionReason}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">Aucune</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(deadline.status)}
-                      {getStatusBadge(deadline.status)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-primary h-2 rounded-full" 
-                          style={{ width: `${deadline.progress}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm font-medium">{deadline.progress}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className={`font-medium ${getDaysRemainingColor(deadline.daysRemaining)}`}>
-                      {deadline.daysRemaining > 0 ? (
-                        <span>{deadline.daysRemaining} jours</span>
-                      ) : deadline.daysRemaining < 0 ? (
-                        <span>{Math.abs(deadline.daysRemaining)} jours de retard</span>
-                      ) : (
-                        <span>Échéance aujourd'hui</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDeadline(deadline)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                  </div>
+                  <div className="flex gap-1 h-2">
+                    <div 
+                      className="bg-green-500 rounded-l-full" 
+                      style={{ width: `${data.total > 0 ? (data.onTime / data.total) * 100 : 0}%` }}
+                    />
+                    <div 
+                      className="bg-red-500" 
+                      style={{ width: `${data.total > 0 ? (data.delayed / data.total) * 100 : 0}%` }}
+                    />
+                    <div 
+                      className="bg-blue-500 rounded-r-full" 
+                      style={{ width: `${data.total > 0 ? (data.completed / data.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Deadline Details Dialog */}
-      {selectedDeadline && (
-        <Dialog open={!!selectedDeadline} onOpenChange={() => setSelectedDeadline(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Détails des Délais</DialogTitle>
-              <DialogDescription>
-                {selectedDeadline.marketNumber} - {selectedDeadline.marketObject}
-              </DialogDescription>
-            </DialogHeader>
-            <DeadlineDetails deadline={selectedDeadline} />
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
-  )
-}
+      {/* Detailed Deadlines Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Détail des Délais</CardTitle>
+          <CardDescription>
+            Suivi détaillé des échéances de tous les marchés
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {marketsWithDeadlines.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Aucun marché avec des délais définis
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Marché</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Date Limite</TableHead>
+                  <TableHead>Jours Restants</TableHead>
+                  <TableHead>Progression</TableHead>
+                  <TableHead>Statut</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {marketsWithDeadlines.map((market) => (
+                  <TableRow key={market.id} className="hover:bg-muted/50">
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{market.number}</div>
+                        <div className="text-sm text-muted-foreground max-w-xs truncate">
+                          {market.object}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="capitalize">{market.service}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {formatDate(market.expected_end_date)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className={`font-medium ${
+                        market.isDelayed ? 'text-red-600' : 
+                        market.daysRemaining <= 7 ? 'text-orange-600' : 
+                        market.daysRemaining <= 30 ? 'text-yellow-600' : 'text-green-600'
+                      }`}>
+                        {market.isDelayed ? 
+                          `${Math.abs(market.daysRemaining)} jours de retard` : 
+                          market.daysRemaining === 0 ? 'Aujourd\'hui' :
+                          `${market.daysRemaining} jours`
+                        }
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        <Progress value={market.progress} className="h-2" />
+                        <span className="text-xs text-muted-foreground">
+                          {market.progress.toFixed(0)}%
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(market)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-// Add Extension Form Component
-function AddExtensionForm({ onSuccess }) {
-  const [formData, setFormData] = useState({
-    marketNumber: "",
-    extensionDays: "",
-    extensionReason: "",
-    newEndDate: "",
-    justification: ""
-  })
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    // Here you would save the extension request to your database
-    console.log("Adding extension request:", formData)
-    onSuccess()
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="marketNumber">Numéro du Marché</Label>
-          <Input
-            id="marketNumber"
-            value={formData.marketNumber}
-            onChange={(e) => setFormData({...formData, marketNumber: e.target.value})}
-            placeholder="MP-2024-001"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="extensionDays">Jours de Prolongation</Label>
-          <Input
-            id="extensionDays"
-            type="number"
-            value={formData.extensionDays}
-            onChange={(e) => setFormData({...formData, extensionDays: e.target.value})}
-            placeholder="30"
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="newEndDate">Nouvelle Date de Fin</Label>
-          <Input
-            id="newEndDate"
-            type="date"
-            value={formData.newEndDate}
-            onChange={(e) => setFormData({...formData, newEndDate: e.target.value})}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="extensionReason">Raison de la Prolongation</Label>
-          <Select value={formData.extensionReason} onValueChange={(value) => setFormData({...formData, extensionReason: value})}>
-            <SelectTrigger>
-              <SelectValue placeholder="Sélectionner une raison" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="retard_materiaux">Retard dans la livraison des matériaux</SelectItem>
-              <SelectItem value="conditions_climatiques">Conditions climatiques défavorables</SelectItem>
-              <SelectItem value="modifications_techniques">Modifications techniques demandées</SelectItem>
-              <SelectItem value="force_majeure">Force majeure</SelectItem>
-              <SelectItem value="autre">Autre raison</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      
-      <div>
-        <Label htmlFor="justification">Justification Détaillée</Label>
-        <textarea
-          id="justification"
-          value={formData.justification}
-          onChange={(e) => setFormData({...formData, justification: e.target.value})}
-          placeholder="Justifiez en détail la demande de prolongation..."
-          className="w-full p-3 border border-input rounded-md min-h-[100px]"
-          required
-        />
-      </div>
-      
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onSuccess}>
-          Annuler
-        </Button>
-        <Button type="submit">
-          Soumettre la Demande
-        </Button>
-      </div>
-    </form>
-  )
-}
-
-// Deadline Details Component
-function DeadlineDetails({ deadline }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <span className="font-medium">Marché:</span>
-          <p>{deadline.marketNumber}</p>
-        </div>
-        <div>
-          <span className="font-medium">Objet:</span>
-          <p>{deadline.marketObject}</p>
-        </div>
-        <div>
-          <span className="font-medium">Date de fin originale:</span>
-          <p>{new Date(deadline.originalEndDate).toLocaleDateString("fr-FR")}</p>
-        </div>
-        <div>
-          <span className="font-medium">Date de fin actuelle:</span>
-          <p>{new Date(deadline.currentEndDate).toLocaleDateString("fr-FR")}</p>
-        </div>
-        <div>
-          <span className="font-medium">Prolongation:</span>
-          <p>{deadline.extensionDays > 0 ? `+${deadline.extensionDays} jours` : "Aucune"}</p>
-        </div>
-        <div>
-          <span className="font-medium">Statut:</span>
-          <p>{deadline.status}</p>
-        </div>
-        <div>
-          <span className="font-medium">Progression:</span>
-          <p>{deadline.progress}%</p>
-        </div>
-        <div>
-          <span className="font-medium">Jours restants:</span>
-          <p className={deadline.daysRemaining < 0 ? "text-red-600" : ""}>
-            {deadline.daysRemaining > 0 ? `${deadline.daysRemaining} jours` : 
-             deadline.daysRemaining < 0 ? `${Math.abs(deadline.daysRemaining)} jours de retard` : 
-             "Échéance aujourd'hui"}
-          </p>
-        </div>
-      </div>
-      
-      {deadline.extensionReason && (
-        <div>
-          <span className="font-medium">Raison de la prolongation:</span>
-          <p className="mt-1 text-sm text-muted-foreground">{deadline.extensionReason}</p>
-        </div>
+      {/* Urgent Deadlines Alert */}
+      {deadlineData.marketsDelayed > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-800">
+              <AlertTriangle className="h-5 w-5" />
+              Marchés en Retard - Action Requise
+            </CardTitle>
+            <CardDescription className="text-red-700">
+              {deadlineData.marketsDelayed} marché{deadlineData.marketsDelayed !== 1 ? 's' : ''} nécessite{deadlineData.marketsDelayed !== 1 ? 'nt' : ''} une attention immédiate
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {marketsWithDeadlines
+                .filter(m => m.isDelayed)
+                .slice(0, 3)
+                .map(market => (
+                  <div key={market.id} className="flex items-center justify-between p-3 bg-red-100 rounded-lg">
+                    <div>
+                      <span className="font-medium">{market.number}</span>
+                      <span className="text-sm text-red-700 ml-2">
+                        {Math.abs(market.daysRemaining)} jours de retard
+                      </span>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      Voir Détails
+                    </Button>
+                  </div>
+                ))}
+              {deadlineData.marketsDelayed > 3 && (
+                <div className="text-center text-sm text-red-700">
+                  Et {deadlineData.marketsDelayed - 3} autre{deadlineData.marketsDelayed - 3 !== 1 ? 's' : ''} marché{deadlineData.marketsDelayed - 3 !== 1 ? 's' : ''} en retard...
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
