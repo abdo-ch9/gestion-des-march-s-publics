@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from 'react'
 import { useAuth } from "../../lib/auth-context"
 import { DashboardLayout } from "../../components/layout/dashboard-layout"
 import { ProtectedRoute } from "../../components/auth/protected-route"
@@ -7,55 +8,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../components/ui/button"
 import { Badge } from "../../components/ui/badge"
 import { Progress } from "../../components/ui/progress"
-import { FileText, BarChart3, TrendingUp, DollarSign } from "lucide-react"
+import { FileText, BarChart3, TrendingUp, DollarSign, Download, RefreshCw, AlertCircle } from "lucide-react"
+import { useReports } from "../../lib/hooks/use-reports"
+import { ReportGeneratorModal } from "../../components/reports/report-generator-modal"
+import { ReportsSkeleton } from "../../components/reports/reports-skeleton"
+import { useToast } from "../../hooks/use-toast"
 
 export default function ReportsPage() {
   const { user } = useAuth()
-
-  // Mock report data
-  const reportStats = {
-    totalContracts: 156,
-    activeContracts: 89,
-    completedContracts: 67,
-    totalValue: 45000000,
-    averageCompletionTime: 45,
-    successRate: 94.2,
-  }
-
-  const performanceMetrics = [
-    {
-      category: "Contrats",
-      metric: "Taux de Réussite",
-      value: 94.2,
-      target: 90,
-      trend: "up",
-      color: "text-green-600",
-    },
-    {
-      category: "Finances",
-      metric: "Efficacité Budgétaire",
-      value: 87.5,
-      target: 85,
-      trend: "up",
-      color: "text-blue-600",
-    },
-    {
-      category: "Marchés",
-      metric: "Temps de Traitement",
-      value: 12.3,
-      target: 15,
-      trend: "up",
-      color: "text-green-600",
-    },
-    {
-      category: "Utilisateurs",
-      metric: "Satisfaction Client",
-      value: 4.2,
-      target: 4.0,
-      trend: "up",
-      color: "text-green-600",
-    },
-  ]
+  const { toast } = useToast()
+  const { 
+    stats, 
+    performanceMetrics, 
+    loading, 
+    error, 
+    refreshData,
+    generateCustomReport,
+    exportReport
+  } = useReports()
+  
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [generatingReport, setGeneratingReport] = useState(false)
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("fr-MA", {
@@ -65,9 +38,91 @@ export default function ReportsPage() {
     }).format(amount)
   }
 
-  const handleGenerateReport = () => {
-    // Logic to generate custom report
-    console.log("Generating report...")
+  const handleGenerateReport = async (reportType, filters) => {
+    try {
+      setGeneratingReport(true)
+      const report = await generateCustomReport(reportType, filters)
+      
+      toast({
+        title: "Rapport généré",
+        description: `Le rapport "${reportType}" a été généré avec succès.`,
+        variant: "default",
+      })
+      
+      console.log('Generated report:', report)
+      setIsModalOpen(false)
+      
+    } catch (err) {
+      toast({
+        title: "Erreur",
+        description: err.message || "Erreur lors de la génération du rapport",
+        variant: "destructive",
+      })
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  const handleExportReport = async (reportType, filters, format) => {
+    try {
+      setGeneratingReport(true)
+      const report = await generateCustomReport(reportType, filters)
+      await exportReport(report, format)
+      
+      toast({
+        title: "Export réussi",
+        description: `Le rapport a été exporté en format ${format.toUpperCase()}.`,
+        variant: "default",
+      })
+      
+    } catch (err) {
+      toast({
+        title: "Erreur d'export",
+        description: err.message || "Erreur lors de l'export du rapport",
+        variant: "destructive",
+      })
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  const handleRefresh = () => {
+    refreshData()
+    toast({
+      title: "Actualisation",
+      description: "Les données ont été actualisées.",
+      variant: "default",
+    })
+  }
+
+  if (error) {
+    return (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center space-y-4">
+              <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
+              <h2 className="text-xl font-semibold text-foreground">Erreur de chargement</h2>
+              <p className="text-muted-foreground">{error}</p>
+              <Button onClick={handleRefresh} variant="outline">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Réessayer
+              </Button>
+            </div>
+          </div>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  }
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <ReportsSkeleton />
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
   }
 
   return (
@@ -82,10 +137,16 @@ export default function ReportsPage() {
                 Générez et consultez des rapports détaillés sur vos activités
               </p>
             </div>
-            <Button onClick={handleGenerateReport}>
-              <FileText className="w-4 h-4 mr-2" />
-              Générer un Rapport
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleRefresh} variant="outline" disabled={loading}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Actualiser
+              </Button>
+              <Button onClick={() => setIsModalOpen(true)}>
+                <FileText className="w-4 h-4 mr-2" />
+                Générer un Rapport
+              </Button>
+            </div>
           </div>
 
           {/* Quick Stats */}
@@ -96,7 +157,9 @@ export default function ReportsPage() {
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportStats.totalContracts}</div>
+                <div className="text-2xl font-bold">
+                  {stats.totalContracts}
+                </div>
                 <p className="text-xs text-muted-foreground">Contrats gérés</p>
               </CardContent>
             </Card>
@@ -107,7 +170,9 @@ export default function ReportsPage() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(reportStats.totalValue)}</div>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(stats.totalValue)}
+                </div>
                 <p className="text-xs text-muted-foreground">Valeur des contrats</p>
               </CardContent>
             </Card>
@@ -118,7 +183,9 @@ export default function ReportsPage() {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportStats.successRate}%</div>
+                <div className="text-2xl font-bold">
+                  {`${stats.successRate}%`}
+                </div>
                 <p className="text-xs text-muted-foreground">Contrats réussis</p>
               </CardContent>
             </Card>
@@ -129,8 +196,49 @@ export default function ReportsPage() {
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{reportStats.averageCompletionTime}j</div>
+                <div className="text-2xl font-bold">
+                  {`${stats.averageTime}j`}
+                </div>
                 <p className="text-xs text-muted-foreground">Durée moyenne</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Additional Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Marchés</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {stats.totalMarkets}
+                </div>
+                <p className="text-xs text-muted-foreground">Total des marchés</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Dépenses</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(stats.totalExpenses)}
+                </div>
+                <p className="text-xs text-muted-foreground">Total des dépenses</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Bénéfice Net</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${stats.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(stats.netProfit)}
+                </div>
+                <p className="text-xs text-muted-foreground">Bénéfice net</p>
               </CardContent>
             </Card>
           </div>
@@ -150,18 +258,18 @@ export default function ReportsPage() {
                     <div className="flex justify-between text-sm">
                       <span className="font-medium">{metric.metric}</span>
                       <span className={metric.color}>
-                        {metric.value}{metric.metric.includes("Temps") ? " jours" : metric.metric.includes("Satisfaction") ? "/5" : "%"}
+                        {metric.value}{metric.unit}
                       </span>
                     </div>
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Objectif: {metric.target}{metric.metric.includes("Temps") ? " jours" : metric.metric.includes("Satisfaction") ? "/5" : "%"}</span>
+                        <span>Objectif: {metric.target}{metric.unit}</span>
                         <span className={metric.trend === "up" ? "text-green-600" : "text-red-600"}>
                           {metric.trend === "up" ? "↑" : "↓"} {Math.abs(metric.value - metric.target).toFixed(1)}
                         </span>
                       </div>
                       <Progress
-                        value={(metric.value / metric.target) * 100}
+                        value={Math.min((metric.value / metric.target) * 100, 120)}
                         className="h-2"
                         max={120}
                       />
@@ -172,7 +280,7 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          {/* Simple Report Generator */}
+          {/* Report Generator */}
           <Card>
             <CardHeader>
               <CardTitle>Générateur de Rapports</CardTitle>
@@ -183,16 +291,31 @@ export default function ReportsPage() {
             <CardContent>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Les fonctionnalités avancées de génération de rapports seront bientôt disponibles.
+                  Utilisez le générateur de rapports pour créer des analyses personnalisées avec filtres avancés et options d'export.
                 </p>
-                <Button onClick={handleGenerateReport} disabled>
-                  <FileText className="w-4 h-4 mr-2" />
-                  Générer un Rapport (Bientôt disponible)
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => setIsModalOpen(true)}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Ouvrir le Générateur
+                  </Button>
+                  <Button variant="outline" onClick={handleRefresh} disabled={loading}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Actualiser les Données
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Report Generator Modal */}
+        <ReportGeneratorModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onGenerateReport={handleGenerateReport}
+          onExportReport={handleExportReport}
+          loading={generatingReport}
+        />
       </DashboardLayout>
     </ProtectedRoute>
   )
