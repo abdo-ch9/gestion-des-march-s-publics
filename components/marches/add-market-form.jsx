@@ -24,6 +24,7 @@ export function AddMarketForm({ onSuccess }) {
     service: "",
     contract_type: "",
     procurement_method: "",
+    status: "draft", // Add status field
     
     // Financial Information
     estimated_amount: "",
@@ -54,7 +55,7 @@ export function AddMarketForm({ onSuccess }) {
   const cleanFormData = (data) => {
     // Define the valid database fields based on the schema
     const validFields = [
-      'number', 'object', 'service', 'contract_type', 'procurement_method',
+      'number', 'object', 'service', 'contract_type', 'procurement_method', 'status',
       'estimated_amount', 'budget_source', 'currency',
       'publication_date', 'submission_deadline', 'expected_start_date', 'expected_end_date',
       'attributaire', 'attributaire_address', 'attributaire_phone', 'attributaire_email',
@@ -85,10 +86,6 @@ export function AddMarketForm({ onSuccess }) {
     }
 
     try {
-      console.log("Form submission started")
-      console.log("User:", user)
-      console.log("Form data:", formData)
-      
       // Validate required fields
       if (!formData.number || !formData.object || !formData.service || !formData.contract_type || !formData.procurement_method) {
         toast.error("Veuillez remplir tous les champs obligatoires")
@@ -104,11 +101,14 @@ export function AddMarketForm({ onSuccess }) {
         estimated_amount: cleanedData.estimated_amount ? parseFloat(cleanedData.estimated_amount) : null
       }
 
-      console.log("Calling addMarket with cleaned data:", marketData)
+      // Add timeout protection to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: La création du marché prend trop de temps')), 30000)
+      })
+
+      const addMarketPromise = addMarket(marketData)
       
-      const result = await addMarket(marketData)
-      
-      console.log("addMarket result:", result)
+      const result = await Promise.race([addMarketPromise, timeoutPromise])
       
       if (result.success) {
         toast.success("Marché créé avec succès!")
@@ -116,13 +116,19 @@ export function AddMarketForm({ onSuccess }) {
       }
     } catch (err) {
       console.error("Error in handleSubmit:", err)
-      console.error("Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name
-      })
       
-      const errorMessage = err.message || "Erreur lors de la création du marché"
+      let errorMessage = "Erreur lors de la création du marché"
+      
+      if (err.message.includes('Timeout')) {
+        errorMessage = "La création du marché prend trop de temps. Vérifiez votre connexion à la base de données."
+      } else if (err.message.includes('Table markets does not exist')) {
+        errorMessage = "La table des marchés n'existe pas. Veuillez exécuter le script SQL de configuration."
+      } else if (err.message.includes('Client Supabase non configuré')) {
+        errorMessage = "Erreur de configuration Supabase. Vérifiez vos variables d'environnement."
+      } else {
+        errorMessage = err.message || errorMessage
+      }
+      
       toast.error(errorMessage)
     }
   }
@@ -219,6 +225,21 @@ export function AddMarketForm({ onSuccess }) {
                       <SelectItem value="entente_directe">Entente Directe</SelectItem>
                       <SelectItem value="demande_prix">Demande de Prix</SelectItem>
                       <SelectItem value="concurrence_restreinte">Concurrence Restreinte</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="status">Statut du Marché</Label>
+                  <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionner le statut" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Brouillon</SelectItem>
+                      <SelectItem value="published">Publié</SelectItem>
+                      <SelectItem value="in_progress">En cours</SelectItem>
+                      <SelectItem value="completed">Terminé</SelectItem>
+                      <SelectItem value="cancelled">Annulé</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

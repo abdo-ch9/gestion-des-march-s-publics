@@ -206,6 +206,44 @@ export function ContractDetails({ contract, open, onOpenChange, userRole, onRefr
                   <p className="font-medium">{contract.duration_days || 0} jours</p>
                 </div>
               </div>
+              
+              {/* Market Information */}
+              {contract.markets && (
+                <div className="mt-4 pt-4 border-t">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Marché associé</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Numéro du marché</p>
+                      <p className="font-medium">{contract.markets.number || 'Non spécifié'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Objet du marché</p>
+                      <p className="font-medium">{contract.markets.object || 'Non spécifié'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Service</p>
+                      <p className="font-medium">{contract.markets.service || 'Non spécifié'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Type de contrat</p>
+                      <p className="font-medium">{contract.markets.contract_type || 'Non spécifié'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Méthode de passation</p>
+                      <p className="font-medium">{contract.markets.procurement_method || 'Non spécifié'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Montant estimé</p>
+                      <p className="font-medium">
+                        {contract.markets.estimated_amount ? 
+                          `${contract.markets.estimated_amount.toLocaleString('fr-FR')} ${contract.markets.currency || 'DH'}` : 
+                          'Non spécifié'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

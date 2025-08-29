@@ -1,5 +1,8 @@
+"use client"
+
 import { LoginForm } from "../components/auth/login-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
+
 
 export default function HomePage() {
   return (
@@ -10,6 +13,8 @@ export default function HomePage() {
           <p className="text-muted-foreground">Office Régional de Mise en Valeur Agricole de Ouarzazate</p>
         </div>
 
+
+        
         <Card>
           <CardHeader>
             <CardTitle>Connexion</CardTitle>

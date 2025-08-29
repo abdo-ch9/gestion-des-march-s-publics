@@ -11,7 +11,7 @@ export default function UsersPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <UserManagement user={user} />
+        <UserManagement />
       </DashboardLayout>
     </ProtectedRoute>
   )

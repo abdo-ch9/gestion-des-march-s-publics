@@ -242,6 +242,7 @@ export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy,
                 <TableRow>
                   <TableHead>Numéro</TableHead>
                   <TableHead>Objet</TableHead>
+                  <TableHead>Marché</TableHead>
                   <TableHead>Attributaire</TableHead>
                   <TableHead>Montant</TableHead>
                   <TableHead>Début</TableHead>
@@ -262,6 +263,16 @@ export function ContractsList({ searchTerm, statusFilter, serviceFilter, sortBy,
                       <TableCell className="font-medium">{displayData.number}</TableCell>
                       <TableCell className="max-w-xs truncate" title={displayData.subject}>
                         {displayData.subject}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate" title={contract.markets ? `${contract.markets.number} - ${contract.markets.object}` : 'Non associé'}>
+                        {contract.markets ? (
+                          <div className="space-y-1">
+                            <div className="font-medium text-sm">{contract.markets.number}</div>
+                            <div className="text-xs text-muted-foreground truncate">{contract.markets.object}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Non associé</span>
+                        )}
                       </TableCell>
                       <TableCell>{displayData.awardee}</TableCell>
                       <TableCell>

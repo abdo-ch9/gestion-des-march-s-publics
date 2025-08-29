@@ -4,47 +4,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Progress } from "../../components/ui/progress"
-import { FileText, Calendar, DollarSign, TrendingUp, Users, Clock } from "lucide-react"
+import { FileText, Calendar, DollarSign, TrendingUp, Users, Clock, RefreshCw, AlertCircle } from "lucide-react"
+import { useDashboard } from "../../lib/hooks/use-dashboard"
+import { SimpleSkeleton } from "../../components/ui/simple-skeleton"
 
 export function AgentDashboard({ user }) {
-  // Mock data for demonstration
-  const stats = {
-    totalContracts: 24,
-    activeContracts: 18,
-    completedContracts: 6,
-    totalValue: 1250000,
-    monthlyProgress: 75,
-  }
-
-  const recentContracts = [
-    {
-      id: "CTR-001",
-      title: "Installation Système d'Irrigation",
-      client: "Coopérative Al Amal",
-      status: "active",
-      progress: 65,
-      dueDate: "2024-02-15",
-      value: 85000,
-    },
-    {
-      id: "CTR-002",
-      title: "Formation Techniques Agricoles",
-      client: "Association Tifawt",
-      status: "completed",
-      progress: 100,
-      dueDate: "2024-01-30",
-      value: 45000,
-    },
-    {
-      id: "CTR-003",
-      title: "Maintenance Équipements",
-      client: "Ferme Benali",
-      status: "active",
-      progress: 30,
-      dueDate: "2024-03-01",
-      value: 32000,
-    },
-  ]
+  const { 
+    stats, 
+    recentContracts, 
+    loading, 
+    error, 
+    refreshDashboard 
+  } = useDashboard()
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -59,12 +30,90 @@ export function AgentDashboard({ user }) {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <SimpleSkeleton className="h-10 w-64 mb-2" />
+          <SimpleSkeleton className="h-5 w-80" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <SimpleSkeleton className="h-4 w-24" />
+                <SimpleSkeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <SimpleSkeleton className="h-8 w-16 mb-2" />
+                <SimpleSkeleton className="h-3 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardHeader>
+            <SimpleSkeleton className="h-6 w-32 mb-2" />
+            <SimpleSkeleton className="h-4 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                  <SimpleSkeleton className="h-16 w-full" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Tableau de Bord Agent</h1>
+            <p className="text-muted-foreground">Bienvenue, {user?.name || 'Agent'}. Voici un aperçu de vos activités.</p>
+          </div>
+          <Button onClick={refreshDashboard} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Actualiser
+          </Button>
+        </div>
+        
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 text-red-800">
+              <AlertCircle className="w-5 h-5" />
+              <div>
+                <h3 className="font-medium">Erreur de chargement</h3>
+                <p className="text-sm">{error}</p>
+              </div>
+            </div>
+            <Button onClick={refreshDashboard} className="mt-4" size="sm">
+              Réessayer
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Tableau de Bord Agent</h1>
-        <p className="text-muted-foreground">Bienvenue, {user?.name || 'Agent'}. Voici un aperçu de vos activités.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Tableau de Bord Agent</h1>
+          <p className="text-muted-foreground">Bienvenue, {user?.name || 'Agent'}. Voici un aperçu de vos activités.</p>
+        </div>
+        <Button onClick={refreshDashboard} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Actualiser
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -124,36 +173,44 @@ export function AgentDashboard({ user }) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {recentContracts.map((contract) => (
-              <div
-                key={contract.id}
-                className="flex items-center justify-between p-4 border border-border rounded-lg"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <h3 className="font-medium">{contract.title}</h3>
-                      <p className="text-sm text-muted-foreground">{contract.client}</p>
+            {recentContracts.length > 0 ? (
+              recentContracts.map((contract) => (
+                <div
+                  key={contract.id}
+                  className="flex items-center justify-between p-4 border border-border rounded-lg"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <h3 className="font-medium">{contract.title}</h3>
+                        <p className="text-sm text-muted-foreground">{contract.client}</p>
+                      </div>
+                      {getStatusBadge(contract.status)}
                     </div>
-                    {getStatusBadge(contract.status)}
+                    <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        Échéance: {new Date(contract.dueDate).toLocaleDateString("fr-FR")}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="w-3 h-3" />
+                        {contract.value.toLocaleString()} MAD
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      Échéance: {new Date(contract.dueDate).toLocaleDateString("fr-FR")}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />
-                      {contract.value.toLocaleString()} MAD
-                    </span>
+                  <div className="ml-4 text-right">
+                    <div className="text-sm font-medium">{contract.progress}%</div>
+                    <Progress value={contract.progress} className="h-2 w-20" />
                   </div>
                 </div>
-                <div className="ml-4 text-right">
-                  <div className="text-sm font-medium">{contract.progress}%</div>
-                  <Progress value={contract.progress} className="h-2 w-20" />
-                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Aucun contrat récent</p>
+                <p className="text-sm">Commencez par créer votre premier contrat</p>
               </div>
-            ))}
+            )}
           </div>
           <div className="mt-4 text-center">
             <Button variant="outline" className="w-full">

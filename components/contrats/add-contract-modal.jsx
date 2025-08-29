@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useContracts } from "../../lib/hooks/use-contracts"
+import { useMarkets } from "../../lib/hooks/use-markets"
 import { useAuth } from "../../lib/auth-context"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog"
 import { Button } from "../ui/button"
@@ -15,10 +16,12 @@ import { toast } from "sonner"
 
 export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
   const { addContract } = useContracts()
+  const { markets, loading: marketsLoading } = useMarkets()
   const { user } = useAuth()
   
   const [formData, setFormData] = useState({
     number: "",
+    market_id: "",
     subject: "",
     awardee: "",
     awardee_address: "",
@@ -59,7 +62,7 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
     }
 
     // Validate required fields
-    const requiredFields = ['number', 'subject', 'awardee', 'initial_amount', 'notification_date', 'start_date', 'duration_days', 'service', 'contract_type', 'procurement_method', 'budget_source']
+    const requiredFields = ['number', 'market_id', 'subject', 'awardee', 'initial_amount', 'notification_date', 'start_date', 'duration_days', 'service', 'contract_type', 'procurement_method', 'budget_source']
     const missingFields = requiredFields.filter(field => !formData[field])
     
     if (missingFields.length > 0) {
@@ -77,6 +80,7 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
       // Reset form and close modal
       setFormData({
         number: "",
+        market_id: "",
         subject: "",
         awardee: "",
         awardee_address: "",
@@ -116,6 +120,7 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
   const handleCancel = () => {
     setFormData({
       number: "",
+      market_id: "",
       subject: "",
       awardee: "",
       awardee_address: "",
@@ -180,6 +185,30 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="market_id">Marché associé *</Label>
+                      <Select value={formData.market_id} onValueChange={(value) => handleInputChange("market_id", value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un marché" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {marketsLoading ? (
+                                                    <SelectItem value="loading" disabled>Chargement des marchés...</SelectItem>
+                      ) : markets.length === 0 ? (
+                        <SelectItem value="no_markets" disabled>Aucun marché disponible</SelectItem>
+                          ) : (
+                            markets.map((market) => (
+                              <SelectItem key={market.id} value={market.id}>
+                                {market.number} - {market.object}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
                       <Label htmlFor="service">Service *</Label>
                       <Select value={formData.service} onValueChange={(value) => handleInputChange("service", value)}>
                         <SelectTrigger>
@@ -192,6 +221,18 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
                           <SelectItem value="maintenance">Maintenance</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="duration_days">Durée (jours) *</Label>
+                      <Input
+                        id="duration_days"
+                        type="number"
+                        value={formData.duration_days}
+                        onChange={(e) => handleInputChange("duration_days", e.target.value)}
+                        placeholder="180"
+                        min="1"
+                        required
+                      />
                     </div>
                   </div>
 
@@ -219,21 +260,6 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="duration_days">Durée (jours) *</Label>
-                      <Input
-                        id="duration_days"
-                        type="number"
-                        value={formData.duration_days}
-                        onChange={(e) => handleInputChange("duration_days", e.target.value)}
-                        placeholder="180"
-                        min="1"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
                       <Label htmlFor="contract_type">Type de contrat *</Label>
                       <Select value={formData.contract_type} onValueChange={(value) => handleInputChange("contract_type", value)}>
                         <SelectTrigger>
@@ -247,6 +273,9 @@ export function AddContractModal({ open, onOpenChange, userRole, onSuccess }) {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="procurement_method">Méthode de passation *</Label>
                       <Select value={formData.procurement_method} onValueChange={(value) => handleInputChange("procurement_method", value)}>

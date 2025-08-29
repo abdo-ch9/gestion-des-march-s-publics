@@ -5,9 +5,8 @@ import { AuthProvider } from '../lib/auth-context'
 import { Suspense } from 'react'
 
 export const metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: "Gestion des Marchés Publics",
+  description: "Système de gestion des marchés publics",
 }
 
 // Hydration safety wrapper component
@@ -21,7 +20,7 @@ function HydrationWrapper({ children }) {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning>
       <head>
         <style>{`
 html {

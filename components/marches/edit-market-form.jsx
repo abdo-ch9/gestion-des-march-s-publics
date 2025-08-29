@@ -15,7 +15,6 @@ import { toast } from "sonner"
 export function EditMarketForm({ market, onSuccess, onCancel }) {
   const { updateMarket, loading } = useMarkets()
   const [activeTab, setActiveTab] = useState("basic")
-  const [isFormReady, setIsFormReady] = useState(false)
   
   // Initialize form data directly from market prop
   const getInitialFormData = (marketData) => {
@@ -71,75 +70,13 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
   }
   
   // Initialize with empty data first, then update when market prop is available
-  const [formData, setFormData] = useState({
-    number: "",
-    object: "",
-    service: "",
-    contract_type: "",
-    procurement_method: "",
-    estimated_amount: "",
-    budget_source: "",
-    currency: "MAD",
-    publication_date: "",
-    submission_deadline: "",
-    expected_start_date: "",
-    expected_end_date: "",
-    attributaire: "",
-    attributaire_address: "",
-    attributaire_phone: "",
-    attributaire_email: "",
-    technical_specifications: "",
-    requirements: "",
-    deliverables: "",
-    notes: "",
-    status: "draft"
-  })
+  const [formData, setFormData] = useState(getInitialFormData(market))
 
   // Initialize form data when market prop changes
   useEffect(() => {
-    console.log("useEffect triggered with market:", market)
-    console.log("useEffect triggered with market.id:", market?.id)
-    
     if (market && market.id) {
-      console.log("Initializing form data with market:", market)
-      console.log("Market service:", market.service)
-      console.log("Market contract_type:", market.contract_type)
-      console.log("Market status:", market.status)
-      
-      // Get fresh initial data
       const initialData = getInitialFormData(market)
-      
-      console.log("Setting initial form data:", initialData)
-      console.log("Initial service value:", initialData.service)
-      console.log("Initial contract_type value:", initialData.contract_type)
-      
-      // Force a complete state update
       setFormData(initialData)
-      setIsFormReady(true)
-      
-      // Also log the current state after setting
-      setTimeout(() => {
-        console.log("Form data after setState:", initialData)
-        console.log("Current formData state should be:", initialData)
-      }, 0)
-    } else {
-      console.log("No market data provided or market.id is missing")
-      setIsFormReady(false)
-    }
-  }, [market?.id]) // Use market.id as dependency instead of the entire market object
-
-  // Add another useEffect to monitor formData changes
-  useEffect(() => {
-    console.log("formData changed to:", formData)
-  }, [formData])
-
-  // Force update form data when market changes (backup mechanism)
-  useEffect(() => {
-    if (market && market.id) {
-      const freshData = getInitialFormData(market)
-      console.log("Force update - setting fresh data:", freshData)
-      setFormData(freshData)
-      setIsFormReady(true)
     }
   }, [market])
 
@@ -176,10 +113,6 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
     e.preventDefault()
 
     try {
-      console.log("Edit form submission started")
-      console.log("Original market:", market)
-      console.log("Current form data:", formData)
-      
       // Validate required fields
       if (!formData.number || !formData.object || !formData.service || !formData.contract_type || !formData.procurement_method) {
         toast.error("Veuillez remplir tous les champs obligatoires")
@@ -188,20 +121,14 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
 
       // Clean up the data and remove fields that don't exist in the database
       const cleanedData = cleanFormData(formData)
-      console.log("Cleaned data:", cleanedData)
       
       // Convert estimated_amount to number
       const marketData = {
         ...cleanedData,
         estimated_amount: cleanedData.estimated_amount ? parseFloat(cleanedData.estimated_amount) : null
       }
-
-      console.log("Final market data to send:", marketData)
-      console.log("Status value being sent:", marketData.status)
       
       const result = await updateMarket(market.id, marketData)
-      
-      console.log("updateMarket result:", result)
       
       if (result.success) {
         toast.success("Marché modifié avec succès!")
@@ -209,30 +136,17 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
       }
     } catch (err) {
       console.error("Error in handleSubmit:", err)
-      console.error("Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name
-      })
-      
       const errorMessage = err.message || "Erreur lors de la modification du marché"
       toast.error(errorMessage)
     }
   }
 
   const handleInputChange = (field, value) => {
-    console.log(`Updating ${field} to:`, value)
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const handleSelectChange = (field, value) => {
-    console.log(`Select updating ${field} to:`, value)
-    console.log(`Previous formData:`, formData)
-    setFormData(prev => {
-      const newData = { ...prev, [field]: value }
-      console.log(`New formData after update:`, newData)
-      return newData
-    })
+    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   if (!market) {
@@ -243,7 +157,7 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
     )
   }
 
-  if (!isFormReady) {
+  if (!formData) { // Changed from isFormReady to formData
     return (
       <div className="text-center py-8">
         <div className="flex items-center justify-center gap-2">
@@ -303,9 +217,6 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
                       <SelectItem value="maintenance">Maintenance</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Current value: {formData.service || "undefined"}
-                  </div>
                 </div>
                 <div>
                   <Label htmlFor="contract_type">Type de Contrat *</Label>
@@ -321,9 +232,6 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
                       <SelectItem value="conseil">Conseil</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Current value: {formData.contract_type || "undefined"}
-                  </div>
                 </div>
                 <div>
                   <Label htmlFor="procurement_method">Méthode de Passation *</Label>
@@ -344,8 +252,6 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
                   <Select 
                     value={formData.status || "draft"} 
                     onValueChange={(value) => {
-                      console.log("Status Select onValueChange called with:", value)
-                      console.log("Previous formData.status:", formData.status)
                       handleSelectChange('status', value)
                     }}
                   >
@@ -360,9 +266,6 @@ export function EditMarketForm({ market, onSuccess, onCancel }) {
                       <SelectItem value="cancelled">Annulé</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Current value: {formData.status || "undefined"}
-                  </div>
                 </div>
               </div>
               

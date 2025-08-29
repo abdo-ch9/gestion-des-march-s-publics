@@ -28,10 +28,10 @@ export function MarketsList({ searchTerm, statusFilter, onMarketSelect, onRefres
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(market => 
-        market.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        market.object?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        market.service?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        market.attributaire?.toLowerCase().includes(searchTerm.toLowerCase())
+        (market.number?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (market.object?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (market.service?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (market.attributaire?.toLowerCase() || '').includes(searchTerm.toLowerCase())
       )
     }
 
