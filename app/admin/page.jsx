@@ -3,7 +3,7 @@
 import { useAuth } from "../../lib/auth-context"
 import { DashboardLayout } from "../../components/layout/dashboard-layout"
 import { ProtectedRoute } from "../../components/auth/protected-route"
-import { EnhancedAdminDashboard } from "../../components/admin/enhanced-admin-dashboard"
+import { AdminDashboard } from "../../components/dashboard/admin-dashboard"
 
 export default function AdminPage() {
   const { user } = useAuth()
@@ -11,7 +11,7 @@ export default function AdminPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <EnhancedAdminDashboard />
+        <AdminDashboard user={user} />
       </DashboardLayout>
     </ProtectedRoute>
   )
